@@ -7,10 +7,14 @@
 ; Variables segment
 
     seg.u Variables
+    
+SpriteHeight	equ 34
 
 counter equ $81
 fujiCounter equ $82
 blossomCounter equ $83
+characterCounter equ $84
+characterLineCounter equ $85
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Code segment
@@ -66,11 +70,11 @@ LVBlank
     sta CTRLPF
 
 LVScan
-    sta WSYNC ;wait for the next scanline    
+	sta WSYNC
 
     ;Skip to the cherry blossoms
     txa
-    cmp #90
+    cmp #94
     bcc DrawCherryTreeBlossomsTop
     
     ;Skip to the mountain top
@@ -83,23 +87,21 @@ LVScan
     dex
     bne LVScan ;we never need to draw anything else in the sky, so skip to next line
 
-DrawSnow ;Draw the snowtop
+DrawSnow 
 
     cmp #130
     bcc DrawMountFuji
-
+    
+    ;Use a counter to draw each pixel of Mount Fuji 4 lines high
+    lda counter
+    cmp #0
+    bne DecrementCounter
+    
+    ;Draw the snowtop
     lda #$9E ;Set the foreground to the snow color
     sta COLUPF
-    jmp DrawMountFujiData
-
-DrawMountFuji ;Draw the mountain itself
-
-    lda #$98 ;Set the foreground to the mountain color
-    sta COLUPF
-
-DrawMountFujiData ;Load the bitmap data for Mount Fuji and draw to the line
-
-    ldy fujiCounter
+    
+        ldy fujiCounter
     lda MountFujiPFData0,y
     sta PF0
 
@@ -109,24 +111,45 @@ DrawMountFujiData ;Load the bitmap data for Mount Fuji and draw to the line
     lda MountFujiPFData2,y
     sta PF2
 
-    ;Use a counter to draw each pixel of Mount Fuji 4 lines high
-    lda counter
-    cmp #4
-    bne IncrementCounter
-
     inc fujiCounter
-    lda #0
+    lda #4
     sta counter
 
     dex
     bne LVScan ;we never need to draw anything else in front of mount fuji, so skip to next line
 
-IncrementCounter
-    inc counter
+DrawMountFuji 
+
+;Use a counter to draw each pixel of Mount Fuji 4 lines high
+    lda counter
+    cmp #0
+    bne DecrementCounter
+
+	;Draw the mountain itself
+    lda #$98 ;Set the foreground to the mountain color
+    sta COLUPF
+
+	ldy fujiCounter
+    lda MountFujiPFData0,y
+    sta PF0
+
+    lda MountFujiPFData1,y
+    sta PF1
+
+    lda MountFujiPFData2,y
+    sta PF2
+
+    inc fujiCounter
+    lda #4
+    sta counter
+
+    dex
+    bne LVScan ;we never need to draw anything else in front of mount fuji, so skip to next line
+
+DecrementCounter
+    dec counter
 
 DoneDrawingBackground
-
-    ;TODO: draw the characters or draw anything else
 
     dex
     bne LVScan
@@ -134,16 +157,22 @@ DoneDrawingBackground
     
 DrawCherryTreeBlossomsTop
 
-    cmp #75
+   cmp #75
     bcc DrawCherryTreeBlossomsMiddle
-
+    
+    ;Use a counter to draw each pixel of the cherry trees 5 lines high
+    lda counter
+    cmp #0
+    bne DecrementCounter
+    
+    ;Draw the tops of the cherry blossom trees    
     lda #$98 ;Set the background to the mountain color
     sta COLUBK
     
     lda #0 ;comment/uncomment to change to normal/mirrored
     sta CTRLPF
     
-    ldy blossomCounter
+    ldy blossomCounter    
     lda CherryTreeBlossomsPFData0,y
     sta PF0
 
@@ -155,44 +184,67 @@ DrawCherryTreeBlossomsTop
 
     lda #$5e ;Set the foreground to the cherry tree blossom color
     sta COLUPF
-
-    ;Use a counter to draw each pixel of the cherry trees 5 lines high
-    lda counter
-    cmp #4
-    bne IncrementCounter
     
     inc blossomCounter ;increment the blossom counter to draw the next line of the bitmap
-    lda #0
+    lda #5
     sta counter
     
     jmp DoneDrawingBackground
     
 DrawCherryTreeBlossomsMiddle
 
-    cmp #40
-    bcc DrawCherryTreeBlossomsBottom
 
+    cmp #60
+   bcc DrawCherryTreeBlossomsBottom
+   
     lda #$5e ;Set the background to the cherry blossom color
     sta COLUBK
-
-    ;Use a counter to draw each pixel of the cherry trees 5 lines high
-    lda counter
-    cmp #20
-    bne IncrementCounter
    
    jmp DoneDrawingBackground
 
 DrawCherryTreeBlossomsBottom
 
-    lda #$59 ;Set the background to the cherry blossom color
-    sta COLUBK
-    sta COLUPF
+		txa		; X -> A
+        sec		; set carry for subtract
+        sbc #20	; local coordinate
+        cmp #SpriteHeight ; in sprite?
+        bcc InSprite	; yes, skip over next
+       
+        lda #0		; not in sprite, load 0
+        sta counter
+        sta characterLineCounter
+        sta characterCounter
+        sta GRP0	; store bitmap
+        sta COLUP0	; store color
+        
+GetBackHere 
 
-    ;Use a counter to draw each pixel of the cherry trees 5 lines high
-    lda counter
-    cmp #20
-    bne IncrementCounter
+    lda #$59 ;Set the background to the cherry blossom color
+    ;sta COLUBK
+    ;sta COLUPF
     jmp DoneDrawingBackground
+    
+InSprite
+    
+	ldy characterCounter		; local coord -> Y
+        lda Frame0,y	; lookup color
+        sta GRP0	; store bitmap
+        lda ColorFrame0,y ; lookup color
+        sta COLUP0	; store color
+        
+        lda characterLineCounter
+        cmp #1
+        bcc DecrementCounterForCharacter
+        
+            inc characterCounter ;increment the blossom counter to draw the next line of the bitmap
+     lda #0
+      sta characterLineCounter
+    
+    jmp GetBackHere
+    
+DecrementCounterForCharacter
+    inc characterLineCounter
+    jmp GetBackHere
 
 endof192Lines
 
@@ -275,16 +327,65 @@ CherryTreeBlossomsPFData0
         .byte #%10000000
         .byte #%11000000
         .byte #%11100000
+        .byte #%11111111
 
 CherryTreeBlossomsPFData1
         .byte #%11000110
         .byte #%11101111
+        .byte #%11111111
         .byte #%11111111
 
 CherryTreeBlossomsPFData2
         .byte #%00100000
         .byte #%01110001
         .byte #%11111011
+        .byte #%11111111
+
+;---Graphics Data from PlayerPal 2600---
+
+Frame0
+        .byte #%00111000;$F0
+        .byte #%00111000;$F8
+        .byte #%00111000;$F8
+        .byte #%00111000;$F8
+        .byte #%00110000;$0A
+        .byte #%11110000;$0A
+        .byte #%11111001;$0A
+        .byte #%10111111;$0A
+        .byte #%10110000;$0A
+        .byte #%00110000;$0A
+        .byte #%00111000;$40
+        .byte #%01111100;$08
+        .byte #%11100100;$08
+        .byte #%11000110;$08
+        .byte #%10000110;$08
+        .byte #%11000011;$F2
+        .byte #%00000000;$F2
+;---End Graphics Data---
+
+
+;---Color Data from PlayerPal 2600---
+
+ColorFrame0
+        .byte #$F0;
+        .byte #$F8;
+        .byte #$F8;
+        .byte #$F8;
+        .byte #$0A;
+        .byte #$0A;
+        .byte #$0A;
+        .byte #$0A;
+        .byte #$0A;
+        .byte #$0A;
+        .byte #$40;
+        .byte #$08;
+        .byte #$08;
+        .byte #$08;
+        .byte #$08;
+        .byte #$F2;
+        .byte #$F2;
+;---End Color Data---
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Epilogue
