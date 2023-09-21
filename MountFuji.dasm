@@ -9,6 +9,8 @@
     seg.u Variables
 
 counter equ $81
+fujiCounter equ $82
+blossomCounter equ $83
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Code segment
@@ -54,61 +56,145 @@ LVBlank
     sta PF1 ;set the pf1 playfield register
     sta PF2 ;set the pf2 playfield register
     sta counter
+    sta fujiCounter
+    sta blossomCounter
 
 ;Draw the 192 scanlines
     ldx #192 ;count 192 lines
-    ldy #0 ;load the foreground color into the Y register
+    
+    lda #1 ;comment/uncomment to change to normal/mirrored
+    sta CTRLPF
 
 LVScan
     sta WSYNC ;wait for the next scanline    
 
+    ;Skip to the cherry blossoms
     txa
-    cmp #100
-    bcc DrawPattern
+    cmp #90
+    bcc DrawCherryTreeBlossomsTop
+    
+    ;Skip to the mountain top
+    cmp #160
+    bcc DrawSnow
 
-    ;TODO: move this default sky color to the DrawBackground routine
-    lda #$70 ;load the blood red for our foreground color
-    sta COLUBK ;set the foreground color
-    jmp nextLVScan
+    ;Draw the empty sky
+    lda #$70 ;Set the background to the sky color
+    sta COLUBK
+    dex
+    bne LVScan ;we never need to draw anything else in the sky, so skip to next line
 
-;TODO: rename this routine to DrawBackground
-DrawPattern
+DrawSnow ;Draw the snowtop
 
-    lda #$70 ;load the blood red for our foreground color
-    sta COLUBK ;set the foreground color
+    cmp #130
+    bcc DrawMountFuji
 
-    lda #$9E ;load the blood red for our foreground color
-    sta COLUPF ;set the foreground color
+    lda #$9E ;Set the foreground to the snow color
+    sta COLUPF
+    jmp DrawMountFujiData
 
-    lda PFData0,y
+DrawMountFuji ;Draw the mountain itself
+
+    lda #$98 ;Set the foreground to the mountain color
+    sta COLUPF
+
+DrawMountFujiData ;Load the bitmap data for Mount Fuji and draw to the line
+
+    ldy fujiCounter
+    lda MountFujiPFData0,y
     sta PF0
 
-    lda PFData1,y
+    lda MountFujiPFData1,y
     sta PF1
 
-    lda PFData2,y
+    lda MountFujiPFData2,y
     sta PF2
 
+    ;Use a counter to draw each pixel of Mount Fuji 4 lines high
     lda counter
-    cmp #5
+    cmp #4
     bne IncrementCounter
 
-IncrementY
-
-    iny ;comment/uncomment to scroll color of foreground
+    inc fujiCounter
     lda #0
     sta counter
-    jmp nextLVScan
+
+    dex
+    bne LVScan ;we never need to draw anything else in front of mount fuji, so skip to next line
 
 IncrementCounter
-
     inc counter
-    jmp nextLVScan
 
-nextLVScan
+DoneDrawingBackground
+
+    ;TODO: draw the characters or draw anything else
 
     dex
     bne LVScan
+    jmp endof192Lines
+    
+DrawCherryTreeBlossomsTop
+
+    cmp #75
+    bcc DrawCherryTreeBlossomsMiddle
+
+    lda #$98 ;Set the background to the mountain color
+    sta COLUBK
+    
+    lda #0 ;comment/uncomment to change to normal/mirrored
+    sta CTRLPF
+    
+    ldy blossomCounter
+    lda CherryTreeBlossomsPFData0,y
+    sta PF0
+
+    lda CherryTreeBlossomsPFData1,y
+    sta PF1
+
+    lda CherryTreeBlossomsPFData2,y
+    sta PF2
+
+    lda #$5e ;Set the foreground to the cherry tree blossom color
+    sta COLUPF
+
+    ;Use a counter to draw each pixel of the cherry trees 5 lines high
+    lda counter
+    cmp #4
+    bne IncrementCounter
+    
+    inc blossomCounter ;increment the blossom counter to draw the next line of the bitmap
+    lda #0
+    sta counter
+    
+    jmp DoneDrawingBackground
+    
+DrawCherryTreeBlossomsMiddle
+
+    cmp #40
+    bcc DrawCherryTreeBlossomsBottom
+
+    lda #$5e ;Set the background to the cherry blossom color
+    sta COLUBK
+
+    ;Use a counter to draw each pixel of the cherry trees 5 lines high
+    lda counter
+    cmp #20
+    bne IncrementCounter
+   
+   jmp DoneDrawingBackground
+
+DrawCherryTreeBlossomsBottom
+
+    lda #$59 ;Set the background to the cherry blossom color
+    sta COLUBK
+    sta COLUPF
+
+    ;Use a counter to draw each pixel of the cherry trees 5 lines high
+    lda counter
+    cmp #20
+    bne IncrementCounter
+    jmp DoneDrawingBackground
+
+endof192Lines
 
 ; Reenable VBLANK for bottom (and top of next frame)
     lda #2
@@ -124,10 +210,14 @@ LVOver
 ;total = 262 lines, go to next frame
     jmp NextFrame
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Epilogue
+;Mount Fuji data
+;colors:
+;snow: 9e
+;sky: 70
+;mountain: 98
+;cherry tree blossoms: 5e
 
-PFData0
+MountFujiPFData0
         .byte #%00000000
         .byte #%00000000
         .byte #%00000000
@@ -145,7 +235,7 @@ PFData0
         .byte #%11110000
         .byte #%11110000
 
-PFData1
+MountFujiPFData1
         .byte #%00000000
         .byte #%00000000
         .byte #%00000000
@@ -163,7 +253,7 @@ PFData1
         .byte #%11111111
         .byte #%11111111
 
-PFData2
+MountFujiPFData2
         .byte #%11100000
         .byte #%11111000
         .byte #%11111100
@@ -180,6 +270,24 @@ PFData2
         .byte #%11111111
         .byte #%11111111
         .byte #%11111111
+        
+CherryTreeBlossomsPFData0
+        .byte #%10000000
+        .byte #%11000000
+        .byte #%11100000
+
+CherryTreeBlossomsPFData1
+        .byte #%11000110
+        .byte #%11101111
+        .byte #%11111111
+
+CherryTreeBlossomsPFData2
+        .byte #%00100000
+        .byte #%01110001
+        .byte #%11111011
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Epilogue
 
     org $fffc
     .word Start	; reset vector
