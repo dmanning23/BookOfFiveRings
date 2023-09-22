@@ -29,6 +29,9 @@ Start
 ;TODO: move this into the DraBackground routine
     lda #1 ;comment/uncomment to change to normal/mirrored
     sta CTRLPF
+    
+    lda #$08 ;Flip player2 by setting the third bit of REFP1
+    sta REFP1
 
 NextFrame
 
@@ -74,11 +77,11 @@ LVScan
 
     ;Skip to the cherry blossoms
     txa
-    cmp #94
+    cmp #100
     bcc DrawCherryTreeBlossomsTop
     
     ;Skip to the mountain top
-    cmp #160
+    cmp #170
     bcc DrawSnow
 
     ;Draw the empty sky
@@ -157,7 +160,7 @@ DoneDrawingBackground
     
 DrawCherryTreeBlossomsTop
 
-   cmp #75
+   cmp #65
     bcc DrawCherryTreeBlossomsMiddle
     
     ;Use a counter to draw each pixel of the cherry trees 5 lines high
@@ -169,8 +172,8 @@ DrawCherryTreeBlossomsTop
     lda #$98 ;Set the background to the mountain color
     sta COLUBK
     
-    lda #0 ;comment/uncomment to change to normal/mirrored
-    sta CTRLPF
+    ;lda #0 ;comment/uncomment to change to normal/mirrored
+    ;sta CTRLPF
     
     ldy blossomCounter    
     lda CherryTreeBlossomsPFData0,y
@@ -193,16 +196,8 @@ DrawCherryTreeBlossomsTop
     
 DrawCherryTreeBlossomsMiddle
 
-
-    cmp #60
-   bcc DrawCherryTreeBlossomsBottom
-   
-    lda #$5e ;Set the background to the cherry blossom color
-    sta COLUBK
-   
-   jmp DoneDrawingBackground
-
-DrawCherryTreeBlossomsBottom
+   lda #$59 ;Set the background to the cherry blossom color
+    sta COLUPF
 
 		txa		; X -> A
         sec		; set carry for subtract
@@ -211,17 +206,8 @@ DrawCherryTreeBlossomsBottom
         bcc InSprite	; yes, skip over next
        
         lda #0		; not in sprite, load 0
-        sta counter
-        sta characterLineCounter
         sta characterCounter
-        sta GRP0	; store bitmap
-        sta COLUP0	; store color
-        
-GetBackHere 
 
-    lda #$59 ;Set the background to the cherry blossom color
-    ;sta COLUBK
-    ;sta COLUPF
     jmp DoneDrawingBackground
     
 InSprite
@@ -229,8 +215,10 @@ InSprite
 	ldy characterCounter		; local coord -> Y
         lda Frame0,y	; lookup color
         sta GRP0	; store bitmap
+        sta GRP1	; store bitmap
         lda ColorFrame0,y ; lookup color
         sta COLUP0	; store color
+        sta COLUP1
         
         lda characterLineCounter
         cmp #1
@@ -240,11 +228,11 @@ InSprite
      lda #0
       sta characterLineCounter
     
-    jmp GetBackHere
+    jmp DoneDrawingBackground
     
 DecrementCounterForCharacter
     inc characterLineCounter
-    jmp GetBackHere
+    jmp DoneDrawingBackground
 
 endof192Lines
 
@@ -328,10 +316,14 @@ CherryTreeBlossomsPFData0
         .byte #%11000000
         .byte #%11100000
         .byte #%11111111
+        .byte #%11111111
+        .byte #%11111111
 
 CherryTreeBlossomsPFData1
         .byte #%11000110
         .byte #%11101111
+        .byte #%11111111
+        .byte #%11111111
         .byte #%11111111
         .byte #%11111111
 
@@ -339,6 +331,8 @@ CherryTreeBlossomsPFData2
         .byte #%00100000
         .byte #%01110001
         .byte #%11111011
+        .byte #%11111111
+        .byte #%11111111
         .byte #%11111111
 
 ;---Graphics Data from PlayerPal 2600---
