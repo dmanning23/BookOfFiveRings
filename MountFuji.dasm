@@ -8,7 +8,7 @@
 
     seg.u Variables
     
-SpriteHeight	equ 34
+SpriteHeight	equ 51
 
 counter equ $81
 fujiCounter equ $82
@@ -25,11 +25,6 @@ characterLineCounter equ $85
 Start
     CLEAN_START ;Macro to initialize several flags and registers, safely clears memory and TIA
 
-;Set the playfield mode to either normal (0) or mirrored (1)
-;TODO: move this into the DraBackground routine
-    lda #1 ;comment/uncomment to change to normal/mirrored
-    sta CTRLPF
-    
     lda #$08 ;Flip player2 by setting the third bit of REFP1
     sta REFP1
 
@@ -67,44 +62,39 @@ LVBlank
     sta blossomCounter
 
 ;Draw the 192 scanlines
-    ldx #192 ;count 192 lines
-    
-    lda #1 ;comment/uncomment to change to normal/mirrored
-    sta CTRLPF
-
 LVScan
-	sta WSYNC
 
-    ;Skip to the cherry blossoms
-    txa
-    cmp #100
-    bcc DrawCherryTreeBlossomsTop
-    
-    ;Skip to the mountain top
-    cmp #170
-    bcc DrawSnow
+;Draw 22 lines of blank sky
+    ldx #22
+DrawSky
 
     ;Draw the empty sky
+    sta WSYNC
     lda #$70 ;Set the background to the sky color
     sta COLUBK
     dex
-    bne LVScan ;we never need to draw anything else in the sky, so skip to next line
-
+    bne DrawSky
+    
+;draw 30 lines of snow
+    stx counter
+    ldx #30
 DrawSnow 
-
-    cmp #130
-    bcc DrawMountFuji
+   
+    sta WSYNC
     
     ;Use a counter to draw each pixel of Mount Fuji 4 lines high
     lda counter
     cmp #0
-    bne DecrementCounter
+    bne DecrementSnowCounter
+    
+    lda #1 ;set background to mirrored for the mountain
+    sta CTRLPF
     
     ;Draw the snowtop
     lda #$9E ;Set the foreground to the snow color
     sta COLUPF
     
-        ldy fujiCounter
+    ldy fujiCounter
     lda MountFujiPFData0,y
     sta PF0
 
@@ -118,21 +108,29 @@ DrawSnow
     lda #4
     sta counter
 
+DecrementSnowCounter
+    dec counter
     dex
-    bne LVScan ;we never need to draw anything else in front of mount fuji, so skip to next line
-
+    bne DrawSnow ;we never need to draw anything else in front of mount fuji, so skip to next line
+    
+    ;draw 30 lines of the mountain
+    stx counter
+    ldx #30
 DrawMountFuji 
 
-;Use a counter to draw each pixel of Mount Fuji 4 lines high
+    sta WSYNC
+
+    ;Use a counter to draw each pixel of Mount Fuji 4 lines high
     lda counter
     cmp #0
-    bne DecrementCounter
+    bne DecrementFujiCounter
 
-	;Draw the mountain itself
+    ;Draw the mountain itself
+        
     lda #$98 ;Set the foreground to the mountain color
     sta COLUPF
 
-	ldy fujiCounter
+    ldy fujiCounter
     lda MountFujiPFData0,y
     sta PF0
 
@@ -145,35 +143,38 @@ DrawMountFuji
     inc fujiCounter
     lda #4
     sta counter
-
-    dex
-    bne LVScan ;we never need to draw anything else in front of mount fuji, so skip to next line
-
-DecrementCounter
+    
+DecrementFujiCounter
     dec counter
-
-DoneDrawingBackground
-
     dex
+    bne DrawMountFuji
+    jmp skipBigJump
+
+bigJump ;this stupid routine is a bridge across pages?
     bne LVScan
     jmp endof192Lines
-    
-DrawCherryTreeBlossomsTop
+        
+skipBigJump
 
-   cmp #65
-    bcc DrawCherryTreeBlossomsMiddle
+;draw 30 lines of cherry tree tops
+
+    lda #0 ;set the background to normal for the cherry trees
+    sta CTRLPF
+    stx counter
+    ldx #30
+DrawCherryTreeBlossomsTop
+    
+     sta WSYNC
     
     ;Use a counter to draw each pixel of the cherry trees 5 lines high
     lda counter
     cmp #0
-    bne DecrementCounter
+    bne DecrementCherryTreeBlossomsTopCounter
     
     ;Draw the tops of the cherry blossom trees    
+   
     lda #$98 ;Set the background to the mountain color
     sta COLUBK
-    
-    ;lda #0 ;comment/uncomment to change to normal/mirrored
-    ;sta CTRLPF
     
     ldy blossomCounter    
     lda CherryTreeBlossomsPFData0,y
@@ -192,47 +193,60 @@ DrawCherryTreeBlossomsTop
     lda #5
     sta counter
     
-    jmp DoneDrawingBackground
+DecrementCherryTreeBlossomsTopCounter
+    dec counter
+    dex
+    bne DrawCherryTreeBlossomsTop
     
+    ;draw the 80 lines of the playfield
+    stx counter
+    ldx #80
 DrawCherryTreeBlossomsMiddle
 
-   lda #$59 ;Set the background to the cherry blossom color
+    sta WSYNC
+    lda #$59 ;Set the background to the cherry blossom color
     sta COLUPF
 
-		txa		; X -> A
-        sec		; set carry for subtract
-        sbc #20	; local coordinate
-        cmp #SpriteHeight ; in sprite?
-        bcc InSprite	; yes, skip over next
+    txa ;X -> A
+    sec ;set carry for subtract
+    sbc #20	;local coordinate
+    cmp #SpriteHeight ;in sprite?
+    bcc InSprite ;yes, skip over next
        
-        lda #0		; not in sprite, load 0
-        sta characterCounter
+    lda #0 ;not in sprite, load 0
+    sta characterCounter
 
     jmp DoneDrawingBackground
     
 InSprite
     
-	ldy characterCounter		; local coord -> Y
-        lda Frame0,y	; lookup color
-        sta GRP0	; store bitmap
-        sta GRP1	; store bitmap
-        lda ColorFrame0,y ; lookup color
-        sta COLUP0	; store color
-        sta COLUP1
-        
-        lda characterLineCounter
-        cmp #1
-        bcc DecrementCounterForCharacter
-        
-            inc characterCounter ;increment the blossom counter to draw the next line of the bitmap
-     lda #0
-      sta characterLineCounter
-    
+    ldy characterCounter ;local coord -> Y
+    lda Frame0,y ;lookup color
+    sta GRP0 ;store bitmap
+    sta GRP1 ;store bitmap
+    lda ColorFrame0,y ;lookup color
+    sta COLUP0 ;store color
+    sta COLUP1
+
+    lda characterLineCounter
+    cmp #2
+    bcc DecrementCounterForCharacter
+
+    inc characterCounter ;increment the blossom counter to draw the next line of the bitmap
+    lda #0
+    sta characterLineCounter
+
     jmp DoneDrawingBackground
     
 DecrementCounterForCharacter
     inc characterLineCounter
     jmp DoneDrawingBackground
+    
+DoneDrawingBackground
+
+    dex
+    bne DrawCherryTreeBlossomsMiddle
+    jmp bigJump
 
 endof192Lines
 
