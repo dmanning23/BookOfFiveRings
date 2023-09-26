@@ -2,6 +2,7 @@
     processor 6502
     include "vcs.h"
     include "macro.h"
+    include "xmacro.h"
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Variables segment
@@ -14,7 +15,11 @@ counter equ $81
 fujiCounter equ $82
 blossomCounter equ $83
 characterCounter equ $84
-characterLineCounter equ $85
+
+XPos0	equ $85	; X position of player 0 sprite
+XPos1	equ $86	; X position of player 1 sprite
+
+controllerMask equ $88 ;This variable is used to mask the controller input to map to p1 or p2
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Code segment
@@ -27,6 +32,18 @@ Start
 
     lda #$08 ;Flip player2 by setting the third bit of REFP1
     sta REFP1
+    
+    ;Make the players double-wide
+    lda #05
+    sta NUSIZ0
+    sta NUSIZ1
+    
+    ; set up initial positions
+
+        lda #35
+        sta XPos0
+        lda #128
+        sta XPos1
 
 NextFrame
 
@@ -41,12 +58,31 @@ NextFrame
     lda #0
     sta VSYNC ;turn off vsync
 
-; 37 lines of underscan. 
-    ldx #37 ;Use the x register to count down the number of scanlines (37)
-LVBlank
-    sta WSYNC ;wait for the next scanline
-    dex ;decremnt x
-    bne LVBlank	;lopp while x != 0
+; 37 lines of underscan
+	TIMER_SETUP 37
+; move X and Y coordinates w/ joystick
+	lda #%11110000
+        sta controllerMask
+	ldy #0
+	jsr MoveJoystick
+        lda #%00001111
+        sta controllerMask
+        ldy #1
+	jsr MoveJoystick
+; the next two scanlines
+; position the player horizontally
+	lda XPos0	; get X coordinate
+        ldx #0		; player 0
+        jsr SetHorizPos	; set coarse offset
+        lda XPos1
+        ldx #1
+        jsr SetHorizPos
+        sta WSYNC	; sync w/ scanline
+        sta HMOVE	; apply fine offsets
+; it's ok if we took an extra scanline because
+; the PIA timer will always count 37 lines
+; wait for end of underscan
+        TIMER_WAIT
 
 ; disable VBLANK and release the TIA to generaqte some color
     lda #0
@@ -65,13 +101,13 @@ LVBlank
 LVScan
 
 ;Draw 22 lines of blank sky
+    lda #$70 ;Set the background to the sky color
+    sta COLUBK
     ldx #22
 DrawSky
 
     ;Draw the empty sky
     sta WSYNC
-    lda #$70 ;Set the background to the sky color
-    sta COLUBK
     dex
     bne DrawSky
     
@@ -198,54 +234,68 @@ DecrementCherryTreeBlossomsTopCounter
     dex
     bne DrawCherryTreeBlossomsTop
     
-    ;draw the 80 lines of the playfield
-    stx counter
-    ldx #80
-DrawCherryTreeBlossomsMiddle
-
     sta WSYNC
     lda #$59 ;Set the background to the cherry blossom color
     sta COLUPF
-
-    txa ;X -> A
-    sec ;set carry for subtract
-    sbc #20	;local coordinate
-    cmp #SpriteHeight ;in sprite?
-    bcc InSprite ;yes, skip over next
-       
-    lda #0 ;not in sprite, load 0
-    sta characterCounter
-
-    jmp DoneDrawingBackground
     
-InSprite
+    ldx #4
+DrawBlossoms
+    ;Draw the empty cherry blossoms on the ground
+    sta WSYNC
+    dex
+    bne DrawBlossoms
     
+    ;draw the 80 lines of the playfield
+    stx counter
+    stx characterCounter
+    ldx #17 ;yikes, every pass of this routine draws 4 lines
+DrawCherryTreeBlossomsMiddle
+
+    sta WSYNC
+    
+    ;Draw Player 1
     ldy characterCounter ;local coord -> Y
-    lda Frame0,y ;lookup color
+    lda Frame0,y ;lookup bitmap byte
     sta GRP0 ;store bitmap
-    sta GRP1 ;store bitmap
     lda ColorFrame0,y ;lookup color
     sta COLUP0 ;store color
-    sta COLUP1
-
-    lda characterLineCounter
-    cmp #2
-    bcc DecrementCounterForCharacter
-
-    inc characterCounter ;increment the blossom counter to draw the next line of the bitmap
-    lda #0
-    sta characterLineCounter
-
-    jmp DoneDrawingBackground
     
-DecrementCounterForCharacter
-    inc characterLineCounter
-    jmp DoneDrawingBackground
+    sta WSYNC
     
-DoneDrawingBackground
-
+    ;Draw player 2 on the next line
+    lda Frame0,y ;lookup bitmap byte
+    sta GRP1 ;store bitmap
+    lda ColorFrame0,y ;lookup color
+    sta COLUP1 ;store color
+    
+    sta WSYNC
+    
+    ;TODO: draw missile1
+    
+    sta WSYNC
+    
+    ;TODO: draw missile2
+   
+   inc characterCounter
+    
     dex
     bne DrawCherryTreeBlossomsMiddle
+    
+    ;clear the character registers when done drawing
+    lda #0
+    sta GRP0 ;store bitmap
+    sta COLUP0 ;store color
+    sta GRP1 ;store bitmap
+    sta COLUP1 ;store color
+    
+    ldx #7
+DrawBlossomsBottom
+    ;Draw the empty cherry blossoms on the ground
+    sta WSYNC
+    dex
+    bne DrawBlossomsBottom
+
+
     jmp bigJump
 
 endof192Lines
@@ -264,12 +314,73 @@ LVOver
 ;total = 262 lines, go to next frame
     jmp NextFrame
 
+; SetHorizPos routine
+; A = X coordinate
+; X = player number (0 or 1)
+SetHorizPos
+	sta WSYNC	; start a new line
+	sec		; set carry flag
+DivideLoop
+	sbc #15		; subtract 15
+	bcs DivideLoop	; branch until negative
+	eor #7		; calculate fine offset
+	asl
+	asl
+	asl
+	asl
+	sta RESP0,x	; fix coarse position
+	sta HMP0,x	; set fine offset
+	rts		; return to caller
+        
+        
+        ; Read joystick movement and apply to object 0
+MoveJoystick
+; Move vertically
+; (up and down are actually reversed since ypos starts at bottom)
+	;ldx YPos
+	lda #%00100000	;Up?
+	bit SWCHA
+	bne SkipMoveUp
+        cpx #2
+        bcc SkipMoveUp
+        dex
+SkipMoveUp
+	lda #%00010000	;Down?
+	bit SWCHA 
+	bne SkipMoveDown
+        cpx #183
+        bcs SkipMoveDown
+        inx
+SkipMoveDown
+	;stx YPos
+; Move horizontally
+        ldx XPos0,y
+	lda #%01000010	;Left?
+        and controllerMask
+	bit SWCHA
+	bne SkipMoveLeft
+        cpx #16
+        bcc SkipMoveLeft
+        dex
+SkipMoveLeft
+	lda #%10001000	;Right?
+        and controllerMask
+	bit SWCHA 
+	bne SkipMoveRight
+        cpx #145
+        bcs SkipMoveRight
+        inx
+SkipMoveRight
+	stx XPos0,y
+	rts
+
 ;Mount Fuji data
 ;colors:
 ;snow: 9e
 ;sky: 70
 ;mountain: 98
 ;cherry tree blossoms: 5e
+; cherry blossoms: 59
 
 MountFujiPFData0
         .byte #%00000000
@@ -352,22 +463,22 @@ CherryTreeBlossomsPFData2
 ;---Graphics Data from PlayerPal 2600---
 
 Frame0
-        .byte #%00111000;$F0
-        .byte #%00111000;$F8
-        .byte #%00111000;$F8
-        .byte #%00111000;$F8
-        .byte #%00110000;$0A
-        .byte #%11110000;$0A
-        .byte #%11111001;$0A
-        .byte #%10111111;$0A
-        .byte #%10110000;$0A
-        .byte #%00110000;$0A
-        .byte #%00111000;$40
-        .byte #%01111100;$08
-        .byte #%11100100;$08
-        .byte #%11000110;$08
-        .byte #%10000110;$08
-        .byte #%11000011;$F2
+        .byte #%00100000;$00
+        .byte #%00111000;$00
+        .byte #%00111000;$FA
+        .byte #%00111000;$FA
+        .byte #%00110000;$0C
+        .byte #%00110000;$0C
+        .byte #%00111000;$0C
+        .byte #%00111010;$0C
+        .byte #%00111110;$0C
+        .byte #%00110000;$0C
+        .byte #%00111000;$70
+        .byte #%00111000;$0A
+        .byte #%01111100;$0A
+        .byte #%11111100;$0A
+        .byte #%11001100;$0A
+        .byte #%11000110;$F2
         .byte #%00000000;$F2
 ;---End Graphics Data---
 
@@ -375,24 +486,25 @@ Frame0
 ;---Color Data from PlayerPal 2600---
 
 ColorFrame0
-        .byte #$F0;
-        .byte #$F8;
-        .byte #$F8;
-        .byte #$F8;
+        .byte #$00;
+        .byte #$00;
+        .byte #$FA;
+        .byte #$FA;
+        .byte #$0C;
+        .byte #$0C;
+        .byte #$0C;
+        .byte #$0C;
+        .byte #$0C;
+        .byte #$0C;
+        .byte #$70;
         .byte #$0A;
         .byte #$0A;
         .byte #$0A;
         .byte #$0A;
-        .byte #$0A;
-        .byte #$0A;
-        .byte #$40;
-        .byte #$08;
-        .byte #$08;
-        .byte #$08;
-        .byte #$08;
         .byte #$F2;
         .byte #$F2;
 ;---End Color Data---
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
