@@ -9,8 +9,6 @@
 
     seg.u Variables
     
-SpriteHeight	equ 51
-
 counter equ $81
 fujiCounter equ $82
 blossomCounter equ $83
@@ -30,6 +28,7 @@ controllerMask equ $88 ;This variable is used to mask the controller input to ma
 Start
     CLEAN_START ;Macro to initialize several flags and registers, safely clears memory and TIA
 
+Reset
     lda #$08 ;Flip player2 by setting the third bit of REFP1
     sta REFP1
     
@@ -39,11 +38,10 @@ Start
     sta NUSIZ1
     
     ; set up initial positions
-
-        lda #35
-        sta XPos0
-        lda #128
-        sta XPos1
+    lda #35 ;p1 position
+    sta XPos0
+    lda #128 ;p2 position
+    sta XPos1
 
 NextFrame
 
@@ -59,26 +57,29 @@ NextFrame
     sta VSYNC ;turn off vsync
 
 ; 37 lines of underscan
-	TIMER_SETUP 37
-; move X and Y coordinates w/ joystick
-	lda #%11110000
-        sta controllerMask
-	ldy #0
-	jsr MoveJoystick
-        lda #%00001111
-        sta controllerMask
-        ldy #1
-	jsr MoveJoystick
+    TIMER_SETUP 37
+
+    ; move X and Y coordinates w/ joystick
+    lda #%11110000 ;this mask is used by the MoveJoystick routine to check p1 joystick
+    sta controllerMask
+    ldy #0
+    jsr MoveJoystick
+    lda #%00001111 ;check p2 joystick
+    sta controllerMask
+    ldy #1
+    jsr MoveJoystick
+
 ; the next two scanlines
 ; position the player horizontally
-	lda XPos0	; get X coordinate
-        ldx #0		; player 0
-        jsr SetHorizPos	; set coarse offset
-        lda XPos1
-        ldx #1
-        jsr SetHorizPos
-        sta WSYNC	; sync w/ scanline
-        sta HMOVE	; apply fine offsets
+    lda XPos0	; get X coordinate
+    ldx #0		; player 0
+    jsr SetHorizPos	; set coarse offset
+    lda XPos1
+    ldx #1
+    jsr SetHorizPos
+    sta WSYNC	; sync w/ scanline
+    sta HMOVE	; apply fine offsets
+
 ; it's ok if we took an extra scanline because
 ; the PIA timer will always count 37 lines
 ; wait for end of underscan
@@ -127,7 +128,7 @@ DrawSnow
     sta CTRLPF
     
     ;Draw the snowtop
-    lda #$9E ;Set the foreground to the snow color
+    lda #$8E ;Set the foreground to the snow color
     sta COLUPF
     
     ldy fujiCounter
@@ -163,7 +164,7 @@ DrawMountFuji
 
     ;Draw the mountain itself
         
-    lda #$98 ;Set the foreground to the mountain color
+    lda #$88 ;Set the foreground to the mountain color
     sta COLUPF
 
     ldy fujiCounter
@@ -197,10 +198,10 @@ skipBigJump
     lda #0 ;set the background to normal for the cherry trees
     sta CTRLPF
     stx counter
-    ldx #30
+    ldx #16
 DrawCherryTreeBlossomsTop
     
-     sta WSYNC
+    sta WSYNC
     
     ;Use a counter to draw each pixel of the cherry trees 5 lines high
     lda counter
@@ -209,7 +210,7 @@ DrawCherryTreeBlossomsTop
     
     ;Draw the tops of the cherry blossom trees    
    
-    lda #$98 ;Set the background to the mountain color
+    lda #$88 ;Set the background to the mountain color
     sta COLUBK
     
     ldy blossomCounter    
@@ -234,39 +235,61 @@ DecrementCherryTreeBlossomsTopCounter
     dex
     bne DrawCherryTreeBlossomsTop
     
-    sta WSYNC
-    lda #$59 ;Set the background to the cherry blossom color
-    sta COLUPF
-    
-    ldx #4
+    ldx #8
 DrawBlossoms
     ;Draw the empty cherry blossoms on the ground
     sta WSYNC
     dex
     bne DrawBlossoms
     
-    ;draw the 80 lines of the playfield
+
+    
+    ;draw the playfield
     stx counter
     stx characterCounter
-    ldx #17 ;yikes, every pass of this routine draws 4 lines
-DrawCherryTreeBlossomsMiddle
-
+    
+    ldx 6 ;yikes, every pass of this routine draws 4 lines
+DrawCherryTreeBlossomsMiddle1
+    jsr DrawPlayersAndMissiles
+    dex
+    bne DrawCherryTreeBlossomsMiddle1
+    
+            sta WSYNC
+    lda #$59 ;Set the background to the cherry blossom color
+    sta COLUPF
+    
+        ldx #11 ;yikes, every pass of this routine draws 4 lines
+DrawCherryTreeBlossomsMiddle2
+    jsr DrawPlayersAndMissiles
+    dex
+    bne DrawCherryTreeBlossomsMiddle2
+    
+    ;clear the character registers when done drawing
+    lda #0
+    sta GRP0 ;store bitmap
+    sta COLUP0 ;store color
+    sta GRP1 ;store bitmap
+    sta COLUP1 ;store color
+    
+    ldx #17
+DrawBlossomsBottom
+    ;Draw the empty cherry blossoms on the ground
     sta WSYNC
+    dex
+    bne DrawBlossomsBottom
+
+    jmp bigJump ;do a double jump to get back to the start of the frame
+    
+DrawPlayersAndMissiles
+	sta WSYNC
     
     ;Draw Player 1
-    ldy characterCounter ;local coord -> Y
-    lda Frame0,y ;lookup bitmap byte
-    sta GRP0 ;store bitmap
-    lda ColorFrame0,y ;lookup color
-    sta COLUP0 ;store color
+    jsr DrawP1
     
     sta WSYNC
     
     ;Draw player 2 on the next line
-    lda Frame0,y ;lookup bitmap byte
-    sta GRP1 ;store bitmap
-    lda ColorFrame0,y ;lookup color
-    sta COLUP1 ;store color
+    jsr DrawP2
     
     sta WSYNC
     
@@ -276,27 +299,24 @@ DrawCherryTreeBlossomsMiddle
     
     ;TODO: draw missile2
    
-   inc characterCounter
+    inc characterCounter
+    rts
     
-    dex
-    bne DrawCherryTreeBlossomsMiddle
-    
-    ;clear the character registers when done drawing
-    lda #0
+DrawP1
+    ldy characterCounter ;local coord -> Y
+    lda Frame0,y ;lookup bitmap byte
     sta GRP0 ;store bitmap
+    lda ColorFrame0,y ;lookup color
     sta COLUP0 ;store color
+    rts
+
+DrawP2
+    ldy characterCounter ;local coord -> Y
+    lda Frame0,y ;lookup bitmap byte
     sta GRP1 ;store bitmap
+    lda ColorFrame1,y ;lookup color
     sta COLUP1 ;store color
-    
-    ldx #7
-DrawBlossomsBottom
-    ;Draw the empty cherry blossoms on the ground
-    sta WSYNC
-    dex
-    bne DrawBlossomsBottom
-
-
-    jmp bigJump
+    rts
 
 endof192Lines
 
@@ -318,61 +338,60 @@ LVOver
 ; A = X coordinate
 ; X = player number (0 or 1)
 SetHorizPos
-	sta WSYNC	; start a new line
-	sec		; set carry flag
+    sta WSYNC	; start a new line
+    sec		; set carry flag
 DivideLoop
-	sbc #15		; subtract 15
-	bcs DivideLoop	; branch until negative
-	eor #7		; calculate fine offset
-	asl
-	asl
-	asl
-	asl
-	sta RESP0,x	; fix coarse position
-	sta HMP0,x	; set fine offset
-	rts		; return to caller
-        
-        
-        ; Read joystick movement and apply to object 0
+    sbc #15		; subtract 15
+    bcs DivideLoop	; branch until negative
+    eor #7		; calculate fine offset
+    asl
+    asl
+    asl
+    asl
+    sta RESP0,x	; fix coarse position
+    sta HMP0,x	; set fine offset
+    rts		; return to caller
+    
+; Read joystick movement and apply to object 0
 MoveJoystick
 ; Move vertically
 ; (up and down are actually reversed since ypos starts at bottom)
-	;ldx YPos
-	lda #%00100000	;Up?
-	bit SWCHA
-	bne SkipMoveUp
-        cpx #2
-        bcc SkipMoveUp
-        dex
+    ;ldx YPos ;skip the ypos in this game
+    lda #%00100000	;Up?
+    bit SWCHA
+    bne SkipMoveUp
+    cpx #2
+    bcc SkipMoveUp
+    dex
 SkipMoveUp
-	lda #%00010000	;Down?
-	bit SWCHA 
-	bne SkipMoveDown
-        cpx #183
-        bcs SkipMoveDown
-        inx
+    lda #%00010000	;Down?
+    bit SWCHA 
+    bne SkipMoveDown
+    cpx #183
+    bcs SkipMoveDown
+    inx
 SkipMoveDown
-	;stx YPos
-; Move horizontally
-        ldx XPos0,y
-	lda #%01000010	;Left?
-        and controllerMask
-	bit SWCHA
-	bne SkipMoveLeft
-        cpx #16
-        bcc SkipMoveLeft
-        dex
+    ;stx YPos ;skip the ypos in this game
+    ; Move horizontally
+    ldx XPos0,y
+    lda #%01000010	;Left?
+    and controllerMask
+    bit SWCHA
+    bne SkipMoveLeft
+    cpx #16
+    bcc SkipMoveLeft
+    dex
 SkipMoveLeft
-	lda #%10001000	;Right?
-        and controllerMask
-	bit SWCHA 
-	bne SkipMoveRight
-        cpx #145
-        bcs SkipMoveRight
-        inx
+    lda #%10001000	;Right?
+    and controllerMask
+    bit SWCHA 
+    bne SkipMoveRight
+    cpx #145
+    bcs SkipMoveRight
+    inx
 SkipMoveRight
-	stx XPos0,y
-	rts
+    stx XPos0,y
+    rts
 
 ;Mount Fuji data
 ;colors:
@@ -441,14 +460,10 @@ CherryTreeBlossomsPFData0
         .byte #%11000000
         .byte #%11100000
         .byte #%11111111
-        .byte #%11111111
-        .byte #%11111111
 
 CherryTreeBlossomsPFData1
         .byte #%11000110
         .byte #%11101111
-        .byte #%11111111
-        .byte #%11111111
         .byte #%11111111
         .byte #%11111111
 
@@ -456,8 +471,6 @@ CherryTreeBlossomsPFData2
         .byte #%00100000
         .byte #%01110001
         .byte #%11111011
-        .byte #%11111111
-        .byte #%11111111
         .byte #%11111111
 
 ;---Graphics Data from PlayerPal 2600---
@@ -467,17 +480,17 @@ Frame0
         .byte #%00111000;$00
         .byte #%00111000;$FA
         .byte #%00111000;$FA
-        .byte #%00110000;$0C
-        .byte #%00110000;$0C
-        .byte #%00111000;$0C
-        .byte #%00111010;$0C
-        .byte #%00111110;$0C
-        .byte #%00110000;$0C
-        .byte #%00111000;$70
-        .byte #%00111000;$0A
-        .byte #%01111100;$0A
-        .byte #%11111100;$0A
-        .byte #%11001100;$0A
+        .byte #%00110000;$94
+        .byte #%00110000;$94
+        .byte #%00111000;$94
+        .byte #%00111010;$94
+        .byte #%00111110;$94
+        .byte #%00110000;$94
+        .byte #%00111000;$90
+        .byte #%00111000;$92
+        .byte #%01111100;$92
+        .byte #%11111100;$92
+        .byte #%11001100;$92
         .byte #%11000110;$F2
         .byte #%00000000;$F2
 ;---End Graphics Data---
@@ -490,21 +503,40 @@ ColorFrame0
         .byte #$00;
         .byte #$FA;
         .byte #$FA;
-        .byte #$0C;
-        .byte #$0C;
-        .byte #$0C;
-        .byte #$0C;
-        .byte #$0C;
-        .byte #$0C;
-        .byte #$70;
-        .byte #$0A;
-        .byte #$0A;
-        .byte #$0A;
-        .byte #$0A;
+        .byte #$0c;
+        .byte #$0c;
+        .byte #$0c;
+        .byte #$0c;
+        .byte #$0c;
+        .byte #$0c;
+        .byte #$90;
+        .byte #$0b;
+        .byte #$0b;
+        .byte #$0b;
+        .byte #$0b;
         .byte #$F2;
         .byte #$F2;
 ;---End Color Data---
 
+
+ColorFrame1
+        .byte #$00;
+        .byte #$00;
+        .byte #$FA;
+        .byte #$FA;
+        .byte #$0c;
+        .byte #$0c;
+        .byte #$0c;
+        .byte #$0c;
+        .byte #$0c;
+        .byte #$0c;
+        .byte #$C0;
+        .byte #$0b;
+        .byte #$0b;
+        .byte #$0b;
+        .byte #$0b;
+        .byte #$F2;
+        .byte #$F2;
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
