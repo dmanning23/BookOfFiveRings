@@ -10,6 +10,14 @@
     seg.u Variables
     org $80
     
+    
+;The input flags are as follows:
+controllerDown		equ #%00000001
+controllerUp		equ #%00000010
+controllerLeft		equ #%00000100
+controllerRight		equ #%00001000
+controllerButton	equ #%00010000
+
 counter .byte
 fujiCounter .byte
 blossomCounter .byte
@@ -23,6 +31,42 @@ controllerMask .byte ;This variable is used to mask the controller input to map 
 player1CharacterPointer .word
 player2CharacterPointer .word
 
+;Whether or not the game is over
+;0 game is not over
+;1 game is over
+gameOver .byte
+
+;State variables
+;The states are:
+;1 standing
+;2 walking
+;3 beginAttack
+;4 attacking
+;5 block
+;6 knockback
+;7 dead
+p1State .byte
+p2State .byte
+
+;The character timer, used to time various state actions
+p1Timer .byte
+p2Timer .byte
+
+
+
+;The player's input from the previous frame
+p1PrevInput .byte
+p2PrevInput .byte
+
+;The player's input from the current frame
+p1Input .byte
+p2Input .byte
+
+;temp variable to tell which player's state is being updated 
+;0 p1
+;1 p2
+p1orP2 .byte
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Code segment
 
@@ -33,11 +77,17 @@ Start
     CLEAN_START ;Macro to initialize several flags and registers, safely clears memory and TIA
 
 Reset
+
+	    ;Make the players double-wide
+    lda #07
+    sta NUSIZ0
+    sta NUSIZ1
+    
     lda #$08 ;Flip player2 by setting the third bit of REFP1
     sta REFP1
     
     ;Make the players double-wide
-    lda #05
+    lda #07
     sta NUSIZ0
     sta NUSIZ1
     
@@ -63,30 +113,36 @@ NextFrame
 ; 37 lines of underscan
     TIMER_SETUP 37
     
+    ;Set teh animation of player1
     lda #<Frame0
     sta player1CharacterPointer
     lda #>Frame0
     sta player1CharacterPointer+1
     
+    ;set the animation of player2
     lda #<Frame0
     sta player2CharacterPointer
     lda #>Frame0
     sta player2CharacterPointer+1
 
-    ; move X and Y coordinates w/ joystick
+    ;Update the players' input from joysticks
+    
     lda #%11110000 ;this mask is used by the MoveJoystick routine to check p1 joystick
     sta controllerMask
     ldy #0
-    jsr MoveJoystick
+   ;jsr MoveJoystick
+    jsr CheckInput
+    jsr MovePlayer
+    
     lda #%00001111 ;check p2 joystick
     sta controllerMask
     ldy #1
-    jsr MoveJoystick
+    ;jsr MoveJoystick
+    ;jsr CheckInput
+    ;jsr MovePlayer
     
-    ;Make the players double-wide
-    lda #07
-    sta NUSIZ0
-    sta NUSIZ1
+    ; move X and Y coordinates w/ joystick
+
 
 ; the next two scanlines
 ; position the player horizontally
@@ -284,9 +340,6 @@ DrawBlossomsTop
     dex
     bne DrawBlossomsTop
     
-    lda #07
-    sta NUSIZ0
-    sta NUSIZ1
 
     ldx #13 ;yikes, every pass of this routine draws 4 lines
 DrawBlossomsMiddle
@@ -380,14 +433,14 @@ MoveJoystick
 ; Move vertically
 ; (up and down are actually reversed since ypos starts at bottom)
     ;ldx YPos ;skip the ypos in this game
-    lda #%00100000	;Up?
+    lda #%00100010	;Up?
     bit SWCHA
     bne SkipMoveUp
     cpx #2
     bcc SkipMoveUp
     dex
 SkipMoveUp
-    lda #%00010000	;Down?
+    lda #%00010001	;Down?
     bit SWCHA 
     bne SkipMoveDown
     cpx #183
@@ -397,7 +450,7 @@ SkipMoveDown
     ;stx YPos ;skip the ypos in this game
     ; Move horizontally
     ldx XPos0,y
-    lda #%01000010	;Left?
+    lda #%01000100	;Left?
     and controllerMask
     bit SWCHA
     bne SkipMoveLeft
@@ -415,6 +468,101 @@ SkipMoveLeft
 SkipMoveRight
     stx XPos0,y
     rts
+    
+    
+CheckInput
+    ;copy current input to prev
+    lda p1Input,y
+    sta p1PrevInput,y
+
+    ;blank out the current input
+    lda #0
+    sta p1Input,y
+
+CheckDown
+    ;check if the down direction is being held
+    lda #%00010001	;down?
+    and controllerMask
+    bit SWCHA
+    bne CheckUp
+
+    ;set the down flag for the current input
+    lda p1Input,y
+    ora controllerDown
+    sta p1Input,y
+
+CheckUp
+    ;check if the up direction is being held
+    lda #%00100010	;Up?
+    and controllerMask
+    bit SWCHA
+    bne CheckLeft
+
+    ;set the up flag for teh current input
+    lda p1Input,y
+    ora controllerUp
+    sta p1Input,y
+
+CheckLeft
+    ;check if the left direction is being held
+    lda #%01000100	;left?
+    and controllerMask
+    bit SWCHA
+    bne CheckRight
+
+    ;set the "left" flag for teh current input
+    lda p1Input,y
+    ora controllerLeft
+    sta p1Input,y
+
+CheckRight
+    ;check if the left direction is being held
+    lda #%10001000	;right?
+    and controllerMask
+    bit SWCHA
+    bne CheckButton
+
+    ;set the "right" flag for teh current input
+    lda p1Input,y
+    ora controllerRight
+    sta p1Input,y
+
+CheckButton
+    ;TODO: check buttons
+    rts
+        
+MovePlayer
+	
+CheckMoveLeft
+    ;load the player's position to the X register
+    ldx XPos0,y
+
+    ;load the player's input to the accumulator
+    lda p1Input,y
+
+    ;Check if the left direction is being held down
+    bit controllerLeft
+    bne CheckMoveRight
+
+    ;Dont walk off the left side of teh screen
+    cpx #16
+    bcc CheckMoveRight
+    dex ;move left!
+
+CheckMoveRight
+    ;Check if the "right" direction is being held down
+    bit controllerRight
+    bpl DoneMovingPlayer
+
+    ;Dont walk off the right side of teh screen
+    cpx #128
+    bcs DoneMovingPlayer
+    inx ;move right!
+
+DoneMovingPlayer
+    ;set the player's new position
+    stx XPos0,y
+    rts
 
 ;Mount Fuji data
 ;colors:
@@ -422,7 +570,7 @@ SkipMoveRight
 ;sky: 70
 ;mountain: 98
 ;cherry tree blossoms: 5e
-; cherry blossoms: 59
+;cherry blossoms: 59
 
 MountFujiPFData0
         .byte #%00000000
