@@ -9,8 +9,46 @@
 
     seg.u Variables
     org $80
-    
-    
+
+counter byte
+fujiCounter byte
+blossomCounter byte
+characterCounter byte
+
+XPos0 byte	; X position of player 0 sprite
+XPos1 byte ; X position of player 1 sprite
+
+controllerMask byte ;This variable is used to mask the controller input to map to p1 or p2
+
+player1CharacterPointer word
+player2CharacterPointer word
+
+;Whether or not the game is over
+;0 game is not over
+;1 game is over
+gameOver byte
+
+;State variables
+p1State byte
+p2State byte
+
+;The character timer, used to time various state actions
+p1Timer byte
+p2Timer byte
+
+;The player's input from the previous frame
+p1PrevInput byte
+p2PrevInput byte
+
+;The player's input from the current frame
+p1Input byte
+p2Input byte
+
+;temp variable to tell which player's state is being updated 
+;0 p1
+;1 p2
+p1orP2 byte
+
 ;The input flags are as follows:
 controllerDown		equ #%00000001
 controllerUp		equ #%00000010
@@ -18,54 +56,14 @@ controllerLeft		equ #%00000100
 controllerRight		equ #%00001000
 controllerButton	equ #%00010000
 
-counter .byte
-fujiCounter .byte
-blossomCounter .byte
-characterCounter .byte
-
-XPos0 .byte	; X position of player 0 sprite
-XPos1 .byte ; X position of player 1 sprite
-
-controllerMask .byte ;This variable is used to mask the controller input to map to p1 or p2
-
-player1CharacterPointer .word
-player2CharacterPointer .word
-
-;Whether or not the game is over
-;0 game is not over
-;1 game is over
-gameOver .byte
-
-;State variables
 ;The states are:
-;1 standing
-;2 walking
-;3 beginAttack
-;4 attacking
-;5 block
-;6 knockback
-;7 dead
-p1State .byte
-p2State .byte
-
-;The character timer, used to time various state actions
-p1Timer .byte
-p2Timer .byte
-
-
-
-;The player's input from the previous frame
-p1PrevInput .byte
-p2PrevInput .byte
-
-;The player's input from the current frame
-p1Input .byte
-p2Input .byte
-
-;temp variable to tell which player's state is being updated 
-;0 p1
-;1 p2
-p1orP2 .byte
+StandingState		equ #00
+WalkingState		equ #01
+BeginAttackState	equ #03
+AttackingState 		equ #04
+BlockingState		equ #05
+KnockbackState		equ #06
+DeadState		    equ #07
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Code segment
@@ -78,24 +76,36 @@ Start
 
 Reset
 
-	    ;Make the players double-wide
-    lda #07
-    sta NUSIZ0
-    sta NUSIZ1
-    
-    lda #$08 ;Flip player2 by setting the third bit of REFP1
-    sta REFP1
-    
     ;Make the players double-wide
     lda #07
     sta NUSIZ0
     sta NUSIZ1
-    
+
+    lda #$08 ;Flip player2 by setting the third bit of REFP1
+    sta REFP1
+
+    ;Make the players double-wide
+    lda #07
+    sta NUSIZ0
+    sta NUSIZ1
+
     ; set up initial positions
     lda #35 ;p1 position
     sta XPos0
     lda #108 ;p2 position
     sta XPos1
+
+    ;set the input up
+    lda #0
+    sta gameOver
+    sta p1State
+    sta p2State
+    sta p1Timer
+    sta p2Timer
+    sta p1PrevInput
+    sta p2PrevInput
+    sta p1Input
+    sta p2Input
 
 NextFrame
 
@@ -112,51 +122,41 @@ NextFrame
 
 ; 37 lines of underscan
     TIMER_SETUP 37
-    
-    ;Set teh animation of player1
-    lda #<Frame0
-    sta player1CharacterPointer
-    lda #>Frame0
-    sta player1CharacterPointer+1
-    
-    ;set the animation of player2
-    lda #<Frame0
-    sta player2CharacterPointer
-    lda #>Frame0
-    sta player2CharacterPointer+1
 
     ;Update the players' input from joysticks
-    
     lda #%11110000 ;this mask is used by the MoveJoystick routine to check p1 joystick
     sta controllerMask
     ldy #0
-   ;jsr MoveJoystick
-    jsr CheckInput
-    jsr MovePlayer
+    jsr CheckInput ;update the input
+    jsr CharacterUpdate ;update the players state
     
+    ;Set teh animation of player1
+    ldx #0
+    jsr SetPlayerAnimation
+
     lda #%00001111 ;check p2 joystick
     sta controllerMask
     ldy #1
-    ;jsr MoveJoystick
-    ;jsr CheckInput
-    ;jsr MovePlayer
+    jsr CheckInput
+    jsr CharacterUpdate
     
-    ; move X and Y coordinates w/ joystick
+    ;Set teh animation of player2
+    ldx #2
+    jsr SetPlayerAnimation
 
+    ;the next two scanlines
+    ;position the player horizontally
+    lda XPos0 ;get X coordinate
+    ldx #0 ;player 0
+    jsr SetHorizPos ;set coarse offset
 
-; the next two scanlines
-; position the player horizontally
-    lda XPos0	; get X coordinate
-    ldx #0		; player 0
-    jsr SetHorizPos	; set coarse offset
-    
     lda XPos1
     ldx #1
     jsr SetHorizPos
-    
-    sta WSYNC	; sync w/ scanline
-    sta HMOVE	; apply fine offsets
-    
+
+    sta WSYNC ;sync w/ scanline
+    sta HMOVE ;apply fine offsets
+
     lda #0
     sta COLUBK ;reset the background color to black to start our new frame
     sta COLUPF ;reset teh foreground color to black to start the new frame
@@ -226,8 +226,8 @@ DecrementSnowCounter
     dec counter
     dex
     bne DrawSnow ;we never need to draw anything else in front of mount fuji, so skip to next line
-    
-    ;draw 30 lines of the mountain
+
+;draw 30 lines of the mountain
     stx counter
     ldx #22
 DrawMountFuji 
@@ -339,21 +339,20 @@ DrawBlossomsTop
     sta WSYNC
     dex
     bne DrawBlossomsTop
-    
 
     ldx #13 ;yikes, every pass of this routine draws 4 lines
 DrawBlossomsMiddle
     jsr DrawPlayers
     dex
     bne DrawBlossomsMiddle
-    
+
     ;clear the character registers when done drawing
     lda #0
     sta GRP0 ;store bitmap
     sta COLUP0 ;store color
     sta GRP1 ;store bitmap
     sta COLUP1 ;store color
-    
+
     ldx #22
 DrawBlossomsBottom
     ;Draw the empty cherry blossoms on the ground
@@ -365,18 +364,18 @@ DrawBlossomsBottom
     
 DrawPlayers
     sta WSYNC
-    
+
     ;Draw Player 1
     jsr DrawP1
-    
+
     sta WSYNC
-    
+
     ;Draw player 2 on the next line
     jsr DrawP2
-    
+
     ;add 2 wsyncs so this matches up
     sta WSYNC
-   
+
     inc characterCounter
     sta WSYNC
     rts
@@ -414,62 +413,20 @@ endof192Lines
 ; A = X coordinate
 ; X = player number (0 or 1)
 SetHorizPos
-    sta WSYNC	; start a new line
-    sec		; set carry flag
+    sta WSYNC ;start a new line
+    sec ;set carry flag
 DivideLoop
-    sbc #15		; subtract 15
-    bcs DivideLoop	; branch until negative
-    eor #7		; calculate fine offset
+    sbc #15 ;subtract 15
+    bcs DivideLoop ;branch until negative
+    eor #7 ;calculate fine offset
     asl
     asl
     asl
     asl
-    sta RESP0,x	; fix coarse position
-    sta HMP0,x	; set fine offset
-    rts		; return to caller
-    
-; Read joystick movement and apply to object 0
-MoveJoystick
-; Move vertically
-; (up and down are actually reversed since ypos starts at bottom)
-    ;ldx YPos ;skip the ypos in this game
-    lda #%00100010	;Up?
-    bit SWCHA
-    bne SkipMoveUp
-    cpx #2
-    bcc SkipMoveUp
-    dex
-SkipMoveUp
-    lda #%00010001	;Down?
-    bit SWCHA 
-    bne SkipMoveDown
-    cpx #183
-    bcs SkipMoveDown
-    inx
-SkipMoveDown
-    ;stx YPos ;skip the ypos in this game
-    ; Move horizontally
-    ldx XPos0,y
-    lda #%01000100	;Left?
-    and controllerMask
-    bit SWCHA
-    bne SkipMoveLeft
-    cpx #16
-    bcc SkipMoveLeft
-    dex
-SkipMoveLeft
-    lda #%10001000	;Right?
-    and controllerMask
-    bit SWCHA 
-    bne SkipMoveRight
-    cpx #128
-    bcs SkipMoveRight
-    inx
-SkipMoveRight
-    stx XPos0,y
-    rts
-    
-    
+    sta RESP0,x ;fix coarse position
+    sta HMP0,x ;set fine offset
+    rts ;return to caller
+
 CheckInput
     ;copy current input to prev
     lda p1Input,y
@@ -481,7 +438,7 @@ CheckInput
 
 CheckDown
     ;check if the down direction is being held
-    lda #%00010001	;down?
+    lda #%00100010	;down?
     and controllerMask
     bit SWCHA
     bne CheckUp
@@ -493,7 +450,7 @@ CheckDown
 
 CheckUp
     ;check if the up direction is being held
-    lda #%00100010	;Up?
+    lda #%00010001	;Up?
     and controllerMask
     bit SWCHA
     bne CheckLeft
@@ -530,9 +487,8 @@ CheckRight
 CheckButton
     ;TODO: check buttons
     rts
-        
+
 MovePlayer
-	
 CheckMoveLeft
     ;load the player's position to the X register
     ldx XPos0,y
@@ -542,27 +498,299 @@ CheckMoveLeft
 
     ;Check if the left direction is being held down
     bit controllerLeft
-    bne CheckMoveRight
+    beq CheckMoveRight
 
     ;Dont walk off the left side of teh screen
     cpx #16
     bcc CheckMoveRight
-    dex ;move left!
+
+    ;Move left
+    dex
+
+    ;Set the player state to walking
+    jmp ChangePlayerToWalking
 
 CheckMoveRight
     ;Check if the "right" direction is being held down
     bit controllerRight
-    bpl DoneMovingPlayer
+    beq ChangePlayerToStanding
 
     ;Dont walk off the right side of teh screen
     cpx #128
-    bcs DoneMovingPlayer
-    inx ;move right!
+    bcs ChangePlayerToStanding
+
+    ;move right!
+    inx 
+
+ChangePlayerToWalking
+    ;is the player standing?
+    lda p1State,y
+    cmp StandingState
+    bne DoneMovingPlayer
+
+    ;Set the player's state to walking
+    lda WalkingState
+    sta p1State,y
+
+    ;restart the timer
+    lda #10
+    sta p1Timer,y
+
+    jmp DoneMovingPlayer
+
+ChangePlayerToStanding
+    lda StandingState
+    sta p1State,y
 
 DoneMovingPlayer
     ;set the player's new position
     stx XPos0,y
     rts
+    
+CharacterUpdate
+    ;Decrement the timer on every character update
+    ldx p1Timer,y
+    dex
+    stx p1Timer,y
+
+    ;check if the game is over
+    lda gameOver
+    cmp #01
+    bne CheckStanding
+
+    ;check if the player is dead
+    lda p1State,y
+    cmp DeadState
+    bne CheckStanding
+
+    ;check if the timer is done
+    lda p1Timer,y
+    cmp #00
+    bne JumpToDoneUpdatingPlayerState
+
+    ;TODO: Toggle the color
+
+    ;set teh x register to the amount of time we want to add to the timer
+    ldx #20
+
+    ;store the x register to the timer
+    stx p1Timer,y
+
+    jmp DoneUpdatingPlayerState
+    
+JumpToDoneUpdatingPlayerState
+	jmp DoneUpdatingPlayerState
+
+CheckStanding  
+    ;Check if the player is standing
+    lda p1State,y
+    cmp StandingState
+    beq CheckStandingWalkingInput
+
+    ;Check if the player is walking
+    cmp WalkingState
+    bne CheckBeginAttacking
+
+    ;TODO: is the timer done? Toggle the animation? Restart the timer?
+
+CheckStandingWalkingInput
+    ;TODO: check for the button press
+
+
+DoneCheckingButtonPress
+
+    ;check for down press
+    lda p1Input,y ;is the down direction currently held?
+    bit controllerDown
+    beq DoneCheckingDownPress
+
+    ;The down direction is currently being held, but is it a new input?
+    eor p1PrevInput,y
+    bit DoneCheckingDownPress
+
+    ;change the state to blocking
+    lda BlockingState
+    sta p1State,y
+
+    ;restart the timer
+    lda #40
+    sta p1Timer,y
+
+    jmp DoneUpdatingPlayerState
+
+DoneCheckingDownPress
+
+    ;Move the player depending on the current input
+    jsr MovePlayer
+
+    jmp DoneUpdatingPlayerState
+
+CheckBeginAttacking
+
+    lda p1State,y
+    cmp BeginAttackState
+    bne CheckAttacking
+
+    ;check if the "up" direction was pressed
+    lda p1Input,y ;is the up direction currently held?
+    bit controllerUp
+    beq DoneCheckingUpPress
+
+    ;The up direction is currently being held, but is it a new input?
+    eor p1PrevInput,y
+    bit DoneCheckingUpPress
+
+    ;change the state to blocking
+    lda StandingState
+    sta p1State,y
+
+    jmp DoneUpdatingPlayerState
+    
+DoneCheckingUpPress
+
+    ;check if the timer is done
+    lda p1Timer,y
+    cmp #00
+    bne DoneUpdatingPlayerState
+
+    ;Change state to attacking
+    lda AttackingState
+    sta p1State,y
+
+    ;start the timer
+    lda #20
+    sta p1Timer,y
+
+    jmp DoneUpdatingPlayerState
+
+CheckAttacking
+
+    lda p1State,y
+    cmp AttackingState
+    bne CheckBlocking
+
+    ;check if the timer is done
+    lda p1Timer,y
+    cmp #00
+    bne DoneUpdatingPlayerState
+
+    ;Change to the standing state
+    lda StandingState
+    sta p1State,y
+
+    jmp DoneUpdatingPlayerState
+
+CheckBlocking
+
+    lda p1State,y
+    cmp BlockingState
+    bne CheckKnockback
+
+    ;check if the timer is done
+    lda p1Timer,y
+    cmp #00
+    bne DoneUpdatingPlayerState
+
+    ;Change to the standing state
+    lda StandingState
+    sta p1State,y
+
+    jmp DoneUpdatingPlayerState
+
+CheckKnockback
+
+    lda p1State,y
+    cmp KnockbackState
+    bne DoneUpdatingPlayerState
+
+    ;TODO: move backwards?
+
+    ;check if the timer is done
+    lda p1Timer,y
+    cmp #00
+    bne DoneUpdatingPlayerState
+
+    ;Change to the standing state
+    lda StandingState
+    sta p1State,y
+
+    jmp DoneUpdatingPlayerState
+
+DoneUpdatingPlayerState
+    rts
+
+SetPlayerAnimation
+CheckStandingAnimation
+    lda p1State,y
+    cmp StandingState
+    bne CheckWalkingAnimation
+
+    ;set the standing animation
+    lda #<Frame0
+    sta player1CharacterPointer,x
+    inx
+    lda #>Frame0
+    sta player1CharacterPointer,x
+
+    jmp DoneCheckingAnimation
+
+CheckWalkingAnimation
+    lda p1State,y
+    cmp WalkingState
+    bne CheckBeginAttackingAnimation
+
+    ;TODO: set the walking animation
+    lda #<Frame1
+    sta player1CharacterPointer,x
+    inx
+    lda #>Frame1
+    sta player1CharacterPointer,x
+
+    jmp DoneCheckingAnimation
+
+CheckBeginAttackingAnimation
+	    lda p1State,y
+    cmp BeginAttackState
+    bne CheckAttackAnimation
+
+    lda #<Frame1
+    sta player1CharacterPointer,x
+    inx
+    lda #>Frame1
+    sta player1CharacterPointer,x
+
+    jmp DoneCheckingAnimation
+CheckAttackAnimation
+	lda p1State,y
+    cmp AttackingState
+    bne CheckBlockAnimation
+
+    lda #<Frame2
+    sta player1CharacterPointer,x
+    inx
+    lda #>Frame2
+    sta player1CharacterPointer,x
+
+    jmp DoneCheckingAnimation
+CheckBlockAnimation
+    lda p1State,y
+    cmp BlockingState
+    bne CheckKnockbackAnimation
+
+    lda #<Frame3
+    sta player1CharacterPointer,x
+    inx
+    lda #>Frame3
+    sta player1CharacterPointer,x
+
+    jmp DoneCheckingAnimation
+CheckKnockbackAnimation
+;TODO: create knockback animation
+
+DoneCheckingAnimation
+    rts
+
+;TODO: Game Logic!
 
 ;Mount Fuji data
 ;colors:
