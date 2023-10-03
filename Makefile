@@ -1,5 +1,5 @@
 all:
-	dasm *.dasm -f3 -v0 -ocart.bin
+	dasm *.dasm -f3 -v0 -oBookOfFiveRings.bin
 
 run:
-	stella cart.bin
+	stella BookOfFiveRings.bin

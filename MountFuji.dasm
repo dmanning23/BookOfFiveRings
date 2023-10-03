@@ -65,6 +65,12 @@ BlockingState		equ #05
 KnockbackState		equ #06
 DeadState		    equ #07
 
+;These are the timers for the various states
+BeginAttackTime	equ #12 
+AttackTime	    equ #30
+BlockTime	    equ #40
+KnockbackTime	equ #50
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Code segment
 
@@ -485,7 +491,30 @@ CheckRight
     sta p1Input,y
 
 CheckButton
-    ;TODO: check buttons
+    ;are we checking p1 or p2? There is a different register depending on which one.
+    tya
+    cmp #01
+    beq CheckP2Button
+
+CheckP1Button
+    lda #%10000000 ;Check if the button is pressed on the first controller
+    bit INPT4
+    beq SetButtonFlag
+    jmp DoneCheckingInput
+
+CheckP2Button
+    lda #%10000000 ;Check if the button is pressed on the second controller
+    bit INPT5
+    beq SetButtonFlag
+    jmp DoneCheckingInput
+
+SetButtonFlag
+    ;set the "button" flag for teh current input
+    lda p1Input,y
+    ora controllerButton
+    sta p1Input,y
+
+DoneCheckingInput
     rts
 
 MovePlayer
@@ -546,7 +575,7 @@ DoneMovingPlayer
     ;set the player's new position
     stx XPos0,y
     rts
-    
+
 CharacterUpdate
     ;Decrement the timer on every character update
     ldx p1Timer,y
@@ -577,9 +606,9 @@ CharacterUpdate
     stx p1Timer,y
 
     jmp DoneUpdatingPlayerState
-    
+
 JumpToDoneUpdatingPlayerState
-	jmp DoneUpdatingPlayerState
+    jmp DoneUpdatingPlayerState
 
 CheckStanding  
     ;Check if the player is standing
@@ -594,8 +623,25 @@ CheckStanding
     ;TODO: is the timer done? Toggle the animation? Restart the timer?
 
 CheckStandingWalkingInput
-    ;TODO: check for the button press
+    ;check for the button press
+    lda p1Input,y ;is the button currently held?
+    bit controllerButton
+    beq DoneCheckingButtonPress
 
+    ;The down direction is currently being held, but is it a new input?
+    eor p1PrevInput,y
+    bit controllerButton
+    beq DoneCheckingButtonPress
+
+    ;change the state to "begin attacking"
+    lda BeginAttackState
+    sta p1State,y
+
+    ;restart the timer
+    lda BeginAttackTime
+    sta p1Timer,y
+
+    jmp DoneUpdatingPlayerState
 
 DoneCheckingButtonPress
 
@@ -606,14 +652,15 @@ DoneCheckingButtonPress
 
     ;The down direction is currently being held, but is it a new input?
     eor p1PrevInput,y
-    bit DoneCheckingDownPress
+    bit controllerDown
+    beq DoneCheckingDownPress
 
     ;change the state to blocking
     lda BlockingState
     sta p1State,y
 
     ;restart the timer
-    lda #40
+    lda BlockTime
     sta p1Timer,y
 
     jmp DoneUpdatingPlayerState
@@ -645,7 +692,7 @@ CheckBeginAttacking
     sta p1State,y
 
     jmp DoneUpdatingPlayerState
-    
+
 DoneCheckingUpPress
 
     ;check if the timer is done
@@ -658,7 +705,7 @@ DoneCheckingUpPress
     sta p1State,y
 
     ;start the timer
-    lda #20
+    lda AttackTime
     sta p1Timer,y
 
     jmp DoneUpdatingPlayerState
@@ -749,7 +796,7 @@ CheckWalkingAnimation
     jmp DoneCheckingAnimation
 
 CheckBeginAttackingAnimation
-	    lda p1State,y
+    lda p1State,y
     cmp BeginAttackState
     bne CheckAttackAnimation
 
@@ -761,7 +808,7 @@ CheckBeginAttackingAnimation
 
     jmp DoneCheckingAnimation
 CheckAttackAnimation
-	lda p1State,y
+    lda p1State,y
     cmp AttackingState
     bne CheckBlockAnimation
 
