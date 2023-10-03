@@ -685,7 +685,8 @@ CheckBeginAttacking
 
     ;The up direction is currently being held, but is it a new input?
     eor p1PrevInput,y
-    bit DoneCheckingUpPress
+    bit controllerUp
+    beq DoneCheckingUpPress
 
     ;change the state to blocking
     lda StandingState
