@@ -23,10 +23,16 @@ controllerMask byte ;This variable is used to mask the controller input to map t
 player1CharacterPointer word
 player2CharacterPointer word
 
+player1ColorPointer word
+player2ColorPointer word
+
 ;Whether or not the game is over
 ;0 game is not over
 ;1 game is over
 gameOver byte
+
+;Timer used to countdown the game over state
+gameOverTimer byte
 
 ;State variables
 p1State byte
@@ -43,11 +49,6 @@ p2PrevInput byte
 ;The player's input from the current frame
 p1Input byte
 p2Input byte
-
-;temp variable to tell which player's state is being updated 
-;0 p1
-;1 p2
-p1orP2 byte
 
 ;The input flags are as follows:
 controllerDown		equ #%00000001
@@ -71,6 +72,8 @@ AttackTime	    equ #30
 BlockTime	    equ #40
 KnockbackTime	equ #50
 
+BloodTime equ #%00010000
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Code segment
 
@@ -79,6 +82,12 @@ KnockbackTime	equ #50
 
 Start
     CLEAN_START ;Macro to initialize several flags and registers, safely clears memory and TIA
+    
+    ;start a new game
+    jsr Reset
+    
+    ;start displaying the game
+	jmp NextFrame
 
 Reset
 
@@ -94,6 +103,8 @@ Reset
     lda #07
     sta NUSIZ0
     sta NUSIZ1
+
+    jsr ResetPlayerColors
 
     ; set up initial positions
     lda #35 ;p1 position
@@ -112,6 +123,7 @@ Reset
     sta p2PrevInput
     sta p1Input
     sta p2Input
+    rts
 
 NextFrame
 
@@ -263,7 +275,7 @@ DrawMountFuji
     inc fujiCounter
     lda #4
     sta counter
-    
+
 DecrementFujiCounter
     dec counter
     dex
@@ -273,7 +285,7 @@ DecrementFujiCounter
 bigJump ;this stupid routine is a bridge across pages?
     bne LVScan
     jmp endof192Lines
-        
+
 skipBigJump
 
 ;draw 30 lines of cherry tree tops
@@ -283,20 +295,20 @@ skipBigJump
     stx counter
     ldx #16
 DrawCherryTreeTops
-    
+
     sta WSYNC
-    
+
     ;Use a counter to draw each pixel of the cherry trees 5 lines high
     lda counter
     cmp #0
     bne DecrementCherryTreeTopsCounter
-    
+
     ;Draw the tops of the cherry blossom trees    
-   
+
     lda #$88 ;Set the background to the mountain color
     sta COLUBK
-    
-    ldy blossomCounter    
+
+    ldy blossomCounter
     lda CherryTreeBlossomsPFData0,y
     sta PF0
 
@@ -308,27 +320,27 @@ DrawCherryTreeTops
 
     lda #$5e ;Set the foreground to the cherry tree color
     sta COLUPF
-    
+
     inc blossomCounter ;increment the blossom counter to draw the next line of the bitmap
     lda #5
     sta counter
-    
+
 DecrementCherryTreeTopsCounter
     dec counter
     dex
     bne DrawCherryTreeTops
-    
+
     ;draw the character playfield!
     stx counter
     stx characterCounter
-    
+
     ldx #10
 DrawCherryTreeBottom1
     ;Draw the bottoms of the cherry trees
     sta WSYNC
     dex
     bne DrawCherryTreeBottom1
-    
+
     ldx #4
 DrawCherryTreeBottom2
     ;Draw the bottoms of the cherry trees
@@ -398,7 +410,7 @@ DrawP2
     ldy characterCounter ;local coord -> Y
     lda (player2CharacterPointer),y ;lookup bitmap byte
     sta GRP1 ;store bitmap
-    lda ColorFramePlayer1,y ;lookup color
+    lda (player2ColorPointer),y ;lookup color
     sta COLUP1 ;store color
     rts
 
@@ -410,6 +422,9 @@ endof192Lines
 
 ; 30 lines of overscan
     TIMER_SETUP 30
+    
+    jsr UpdateGameLogic
+    
     TIMER_WAIT
 
 ;total = 262 lines, go to next frame
@@ -590,21 +605,30 @@ CharacterUpdate
     ;check if the player is dead
     lda p1State,y
     cmp DeadState
-    bne CheckStanding
-
-    ;check if the timer is done
-    lda p1Timer,y
-    cmp #00
     bne JumpToDoneUpdatingPlayerState
 
-    ;TODO: Toggle the color
+    ;Toggle the color to the blood if required
+    ;AND teh game over timer with 16, if it is 0, set the player to neutral color
+    lda gameOverTimer
+    bit BloodTime
+    bne ToggleBloodyColor
 
-    ;set teh x register to the amount of time we want to add to the timer
-    ldx #20
+    jsr ResetPlayerColors
+    jmp DoneUpdatingPlayerState
 
-    ;store the x register to the timer
-    stx p1Timer,y
+ToggleBloodyColor
+    ;which player?
+    tya
+    cmp #00
+    beq ToggleP1Bloody
 
+    ldx #02
+    jsr SetBloodyColor
+    jmp DoneUpdatingPlayerState
+
+ToggleP1Bloody
+    ldx #00
+    jsr SetBloodyColor
     jmp DoneUpdatingPlayerState
 
 JumpToDoneUpdatingPlayerState
@@ -638,7 +662,7 @@ CheckStandingWalkingInput
     sta p1State,y
 
     ;restart the timer
-    lda BeginAttackTime
+    lda BeginAttackTime ;TODO: for some reason this is fubar for player 2
     sta p1Timer,y
 
     jmp DoneUpdatingPlayerState
@@ -838,7 +862,173 @@ CheckKnockbackAnimation
 DoneCheckingAnimation
     rts
 
-;TODO: Game Logic!
+ResetPlayerColors ;TODO: the player color pointers are not working
+    ;Set the player colors to their neutral color
+    lda #<ColorFrame0
+    sta player1ColorPointer
+    lda #>ColorFrame0
+    sta player1ColorPointer,1
+
+    lda #<ColorFramePlayer1
+    sta player2ColorPointer
+    lda #>ColorFramePlayer1
+    sta player2ColorPointer,1
+    rts
+
+SetBloodyColor
+    lda #<ColorBlood
+    sta player1ColorPointer,x
+    inx
+    lda #>ColorBlood
+    sta player1ColorPointer,x
+    rts
+
+UpdateGameLogic
+    ;check if the game is over
+    lda gameOver
+    cmp #01
+    beq GameOverState
+
+    ;check how close the players are
+    LDA XPos0     ; Load the value of XPos0 into the accumulator
+    CMP XPos1     ; Compare XPos0 with XPos1
+    BCC XPos1Greater ; If XPos0 is less than XPos1, branch to XPos1Greater
+
+    jmp XPos0GreaterOrEqual
+    
+GameOverState
+    ;The game is over!
+
+    ;Decrement the game over timer
+    ldx gameOverTimer
+    dex
+    stx gameOverTimer
+    txa
+    cmp #0
+    bne JumpToDoneUpdating
+
+    ;the game is over, we've wantched the loser flash red, restart the game
+    jsr Reset
+
+JumpToDoneUpdating
+    jmp DoneUpdatingGameLogic
+
+XPos0GreaterOrEqual:
+    lda XPos0
+    SBC XPos1     ; Subtract XPos1 from the accumulator
+    CMP #17       ; Compare the result with 64
+    BCC CloseEnough  ; If result is less than 64, branch to LessThan
+    JMP DoneUpdatingGameLogic      ; Jump to Done if result is greater or equal to 64
+
+XPos1Greater:
+    LDA XPos1
+    sbc XPos0
+    cmp #17
+    bcc CloseEnough
+    jmp DoneUpdatingGameLogic
+
+CloseEnough
+    ;is p1 attacking
+    lda p1State
+    cmp AttackingState
+    bne CheckPlayer2GameLogic
+
+    ;is p2 blocking
+    lda p2State
+    cmp BlockingState
+    bne CheckP2Attacking
+
+    ;Player 1 has been bounced back
+    ldy 0
+    jmp BouncePlayer
+
+CheckP2Attacking
+    ;is p2 attacking or begin attacking
+    cmp AttackingState
+    bne CheckP2BeginAttacking
+
+    ;Both players are attacking, bounce them both
+    jmp SetDoubleBounce
+
+CheckP2BeginAttacking
+    cmp BeginAttackState
+    bne KillP2
+
+    ;Both players are attacking, bounce them both
+    jmp SetDoubleBounce
+
+KillP2
+    ;p2 has been killed
+    ldy 1
+    jmp KillPlayer
+
+CheckPlayer2GameLogic
+    ;is p2 attacking
+    lda p2State
+    cmp AttackingState
+    bne DoneUpdatingGameLogic
+
+    ;is p1 blocking
+    lda p1State
+    cmp BlockingState
+    bne CheckP1BeginAttacking
+
+    ;Player 2 has been bounced back
+    ldy 1
+    jmp BouncePlayer
+
+CheckP1BeginAttacking
+    ;is p1 begin attacking
+    cmp BeginAttackState
+    bne KillP1
+
+    ;Both players are attacking, bounce them both
+    jmp SetDoubleBounce
+
+KillP1
+    ;p1 has been killed
+    ldy 0
+    jmp KillPlayer
+
+KillPlayer
+    ;set teh game to over
+    lda #01
+    sta gameOver 
+
+    ;start the game over timer
+    lda #$FF
+    sta gameOverTimer
+
+    ;set the player to dead
+    lda DeadState
+    sta p1State,y
+
+    ;set the players timer
+    lda #01
+    sta p1Timer,y
+    jmp DoneUpdatingGameLogic
+
+BouncePlayer
+    ;Set the player to being knocked back
+    lda KnockbackState
+    sta p1State,y
+
+    ;Set the player's timer
+    lda KnockbackTime
+    sta p1Timer,y
+
+    jmp DoneUpdatingGameLogic
+
+SetDoubleBounce
+    ;The game is in a state where both players are getting bounced
+    ldy 0
+    jsr BouncePlayer
+
+    ldy 1
+    jsr BouncePlayer
+
+DoneUpdatingGameLogic
+    rts
 
 ;Mount Fuji data
 ;colors:
@@ -1092,6 +1282,25 @@ ColorFramePlayer1
         .byte #$0b;
         .byte #$F0;
         .byte #$F0;
+
+ColorBlood
+        .byte #$40;
+        .byte #$40;
+        .byte #$40;
+        .byte #$40;
+        .byte #$40;
+        .byte #$40;
+        .byte #$40;
+        .byte #$40;
+        .byte #$40;
+        .byte #$40;
+        .byte #$40;
+        .byte #$40;
+        .byte #$40;
+        .byte #$40;
+        .byte #$40;
+        .byte #$40;
+        .byte #$40;
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Epilogue
