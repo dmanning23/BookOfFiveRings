@@ -402,7 +402,10 @@ DrawP1
     ldy characterCounter ;local coord -> Y
     lda (player1CharacterPointer),y ;lookup bitmap byte
     sta GRP0 ;store bitmap
-    lda ColorFrame0,y ;lookup color
+
+    ;lookup the color
+    ;lda (player1ColorPointer),y ;TODO: fix the color pointer
+    lda ColorFrame0,y
     sta COLUP0 ;store color
     rts
 
@@ -410,7 +413,10 @@ DrawP2
     ldy characterCounter ;local coord -> Y
     lda (player2CharacterPointer),y ;lookup bitmap byte
     sta GRP1 ;store bitmap
-    lda (player2ColorPointer),y ;lookup color
+
+    ;lookup color
+    ;lda (player2ColorPointer),y ;TODO: fix the color pointer
+    lda ColorFramePlayer1,y
     sta COLUP1 ;store color
     rts
 
@@ -933,6 +939,7 @@ CloseEnough
     cmp AttackingState
     bne CheckPlayer2GameLogic
 
+    ;TODO: test p2 blocks p1
     ;is p2 blocking
     lda p2State
     cmp BlockingState
@@ -947,12 +954,16 @@ CheckP2Attacking
     cmp AttackingState
     bne CheckP2BeginAttacking
 
+    ;TODO: test bounce both players
+
     ;Both players are attacking, bounce them both
     jmp SetDoubleBounce
 
 CheckP2BeginAttacking
     cmp BeginAttackState
     bne KillP2
+
+    ;TODO: test bounce both players
 
     ;Both players are attacking, bounce them both
     jmp SetDoubleBounce
@@ -968,6 +979,8 @@ CheckPlayer2GameLogic
     cmp AttackingState
     bne DoneUpdatingGameLogic
 
+    ;TODO: test p1 blocks p2
+
     ;is p1 blocking
     lda p1State
     cmp BlockingState
@@ -981,6 +994,8 @@ CheckP1BeginAttacking
     ;is p1 begin attacking
     cmp BeginAttackState
     bne KillP1
+
+    ;TODO: test bounce both players
 
     ;Both players are attacking, bounce them both
     jmp SetDoubleBounce
