@@ -644,7 +644,7 @@ ToggleBloodyColor1
     ;which player?
     tya
     cmp #00
-    beq ToggleP1Bloody
+    beq ToggleP1Bloody1
 
     ldx #02
     jsr SetBloodyColor1
