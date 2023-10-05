@@ -70,9 +70,13 @@ DeadState		    equ #07
 BeginAttackTime	equ #12 
 AttackTime	    equ #30
 BlockTime	    equ #40
-KnockbackTime	equ #50
+KnockbackTime	equ #40
 
 BloodTime equ #%00010000
+
+;the borders of the screen
+LeftSide equ #16
+RightSide equ #128
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Code segment
@@ -404,8 +408,8 @@ DrawP1
     sta GRP0 ;store bitmap
 
     ;lookup the color
-    ;lda (player1ColorPointer),y ;TODO: fix the color pointer
-    lda ColorFrame0,y
+    lda (player1ColorPointer),y
+    ;lda ColorFrame0,y
     sta COLUP0 ;store color
     rts
 
@@ -415,8 +419,7 @@ DrawP2
     sta GRP1 ;store bitmap
 
     ;lookup color
-    ;lda (player2ColorPointer),y ;TODO: fix the color pointer
-    lda ColorFramePlayer1,y
+    lda (player2ColorPointer),y
     sta COLUP1 ;store color
     rts
 
@@ -551,7 +554,7 @@ CheckMoveLeft
     beq CheckMoveRight
 
     ;Dont walk off the left side of teh screen
-    cpx #16
+    cpx LeftSide
     bcc CheckMoveRight
 
     ;Move left
@@ -619,7 +622,7 @@ CharacterUpdate
     bit BloodTime
     bne ToggleBloodyColor
 
-    jsr ResetPlayerColors
+    jsr ToggleBloodyColor1
     jmp DoneUpdatingPlayerState
 
 ToggleBloodyColor
@@ -635,6 +638,21 @@ ToggleBloodyColor
 ToggleP1Bloody
     ldx #00
     jsr SetBloodyColor
+    jmp DoneUpdatingPlayerState
+
+ToggleBloodyColor1
+    ;which player?
+    tya
+    cmp #00
+    beq ToggleP1Bloody
+
+    ldx #02
+    jsr SetBloodyColor1
+    jmp DoneUpdatingPlayerState
+
+ToggleP1Bloody1
+    ldx #00
+    jsr SetBloodyColor1
     jmp DoneUpdatingPlayerState
 
 JumpToDoneUpdatingPlayerState
@@ -668,7 +686,8 @@ CheckStandingWalkingInput
     sta p1State,y
 
     ;restart the timer
-    lda BeginAttackTime ;TODO: for some reason this is fubar for player 2
+    ;lda BeginAttackTime ;for some reason this is fubar for player 2
+    lda #12 
     sta p1Timer,y
 
     jmp DoneUpdatingPlayerState
@@ -781,8 +800,32 @@ CheckKnockback
     cmp KnockbackState
     bne DoneUpdatingPlayerState
 
-    ;TODO: move backwards?
+    ;Scoot the player backwards while they are in knockback state
+    ldx XPos0,y ;load the player's position so we can check to not kncok them off screen
+    tya
+    cmp #00 ;check which player is being knocked back
+    bne ScootBackPlayer2
 
+    ;scoot back player 1
+    cpx LeftSide
+    bcc DoneScootingBack
+
+    ;Move left
+    dex
+    stx XPos0,y
+    jmp DoneScootingBack
+
+ScootBackPlayer2
+
+    ;scoot back player 2
+    cpx #128
+    bcs DoneScootingBack
+
+    ;move right!
+    inx 
+    stx XPos0,y
+
+DoneScootingBack
     ;check if the timer is done
     lda p1Timer,y
     cmp #00
@@ -863,22 +906,34 @@ CheckBlockAnimation
 
     jmp DoneCheckingAnimation
 CheckKnockbackAnimation
-;TODO: create knockback animation
+    lda p1State,y
+    cmp KnockbackState
+    bne DoneCheckingAnimation
+
+    lda #<Frame4
+    sta player1CharacterPointer,x
+    inx
+    lda #>Frame4
+    sta player1CharacterPointer,x
 
 DoneCheckingAnimation
     rts
 
-ResetPlayerColors ;TODO: the player color pointers are not working
+ResetPlayerColors
     ;Set the player colors to their neutral color
+    ldx #00
     lda #<ColorFrame0
-    sta player1ColorPointer
+    sta player1ColorPointer,x
+    inx
     lda #>ColorFrame0
-    sta player1ColorPointer,1
+    sta player1ColorPointer,x
 
+    inx
     lda #<ColorFramePlayer1
-    sta player2ColorPointer
+    sta player1ColorPointer,x
+    inx
     lda #>ColorFramePlayer1
-    sta player2ColorPointer,1
+    sta player1ColorPointer,x
     rts
 
 SetBloodyColor
@@ -886,6 +941,14 @@ SetBloodyColor
     sta player1ColorPointer,x
     inx
     lda #>ColorBlood
+    sta player1ColorPointer,x
+    rts
+
+SetBloodyColor1
+    lda #<ColorBlood1
+    sta player1ColorPointer,x
+    inx
+    lda #>ColorBlood1
     sta player1ColorPointer,x
     rts
 
@@ -939,7 +1002,6 @@ CloseEnough
     cmp AttackingState
     bne CheckPlayer2GameLogic
 
-    ;TODO: test p2 blocks p1
     ;is p2 blocking
     lda p2State
     cmp BlockingState
@@ -954,16 +1016,12 @@ CheckP2Attacking
     cmp AttackingState
     bne CheckP2BeginAttacking
 
-    ;TODO: test bounce both players
-
     ;Both players are attacking, bounce them both
     jmp SetDoubleBounce
 
 CheckP2BeginAttacking
     cmp BeginAttackState
     bne KillP2
-
-    ;TODO: test bounce both players
 
     ;Both players are attacking, bounce them both
     jmp SetDoubleBounce
@@ -979,8 +1037,6 @@ CheckPlayer2GameLogic
     cmp AttackingState
     bne DoneUpdatingGameLogic
 
-    ;TODO: test p1 blocks p2
-
     ;is p1 blocking
     lda p1State
     cmp BlockingState
@@ -994,8 +1050,6 @@ CheckP1BeginAttacking
     ;is p1 begin attacking
     cmp BeginAttackState
     bne KillP1
-
-    ;TODO: test bounce both players
 
     ;Both players are attacking, bounce them both
     jmp SetDoubleBounce
@@ -1169,11 +1223,11 @@ Frame2
         .byte #%00110000;$FA
         .byte #%00110000;$FA
         .byte #%00100000;$0C
-        .byte #%01100000;$0C
-        .byte #%01100000;$0C
-        .byte #%01110000;$0C
-        .byte #%01110001;$0C
+        .byte #%01100001;$0C
         .byte #%01111110;$0C
+        .byte #%01110000;$0C
+        .byte #%01100000;$0C
+        .byte #%01100000;$0C
         .byte #%01100000;$90
         .byte #%01100000;$0A
         .byte #%11110000;$0A
@@ -1197,6 +1251,24 @@ Frame3
         .byte #%11110000;$0A
         .byte #%11011000;$0A
         .byte #%11011000;$0A
+        .byte #%11001100;$F0
+        .byte #%00000000;$F0
+Frame4
+        .byte #%00010000;$00
+        .byte #%00011000;$00
+        .byte #%00011000;$FA
+        .byte #%00011000;$FA
+        .byte #%10010000;$0C
+        .byte #%10011000;$0C
+        .byte #%10111000;$0C
+        .byte #%11111000;$0C
+        .byte #%01111000;$0C
+        .byte #%00110000;$0C
+        .byte #%00110000;$90
+        .byte #%00111000;$0A
+        .byte #%01111100;$0A
+        .byte #%01101100;$0A
+        .byte #%11101100;$0A
         .byte #%11001100;$F0
         .byte #%00000000;$F0
 ;---End Graphics Data---
@@ -1276,6 +1348,24 @@ ColorFrame3
         .byte #$0A;
         .byte #$F0;
         .byte #$F0;
+ColorFrame4
+        .byte #$00;
+        .byte #$00;
+        .byte #$FA;
+        .byte #$FA;
+        .byte #$0C;
+        .byte #$0C;
+        .byte #$0C;
+        .byte #$0C;
+        .byte #$0C;
+        .byte #$0C;
+        .byte #$90;
+        .byte #$0A;
+        .byte #$0A;
+        .byte #$0A;
+        .byte #$0A;
+        .byte #$F0;
+        .byte #$F0;
 ;---End Color Data---
 
 
@@ -1316,6 +1406,25 @@ ColorBlood
         .byte #$40;
         .byte #$40;
         .byte #$40;
+
+ColorBlood1
+        .byte #$1C;
+        .byte #$1C;
+        .byte #$1C;
+        .byte #$1C;
+        .byte #$1C;
+        .byte #$1C;
+        .byte #$1C;
+        .byte #$1C;
+        .byte #$1C;
+        .byte #$1C;
+        .byte #$1C;
+        .byte #$1C;
+        .byte #$1C;
+        .byte #$1C;
+        .byte #$1C;
+        .byte #$1C;
+        .byte #$1C;
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Epilogue
