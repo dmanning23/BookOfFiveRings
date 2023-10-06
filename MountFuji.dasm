@@ -859,8 +859,6 @@ CheckWalkingAnimation
     cmp WalkingState
     bne CheckBeginAttackingAnimation
 
-    ;TODO: restart the state timer when the players changes to walk animation
-   
     lda p1Timer,y ;load the state timer into the A reg
     bit WalkTime ;AND with 4 frames to animate the player
     bne SetAnimationFrame0
@@ -874,10 +872,10 @@ CheckWalkingAnimation
     jmp DoneCheckingAnimation
 
 SetAnimationFrame0
-    lda #<Frame1
+    lda #<Frame6
     sta player1CharacterPointer,x
     inx
-    lda #>Frame1
+    lda #>Frame6
     sta player1CharacterPointer,x
 
     jmp DoneCheckingAnimation
@@ -1315,9 +1313,9 @@ Frame6
         .byte #%01110000;$0C
         .byte #%01100000;$90
         .byte #%01100000;$0A
-        .byte #%11110000;$0A
-        .byte #%11011000;$0A
-        .byte #%11111000;$0A
+        .byte #%01110000;$0A
+        .byte #%01011000;$0A
+        .byte #%01011000;$0A
         .byte #%01101100;$F0
         .byte #%00000000;$F0
 ;---End Graphics Data---
