@@ -8,7 +8,7 @@ Put the slicey part of the katana into the opponent.
 
 First person to die, loses.
 
-| Control        | Action  |
+| Action        | Result  |
 |:------------- | -----:|
 | Left      | Move left |
 | Right      | Move right |
