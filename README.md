@@ -17,5 +17,6 @@ First person to die, loses.
 | Down | Block |
 | Yell | KIAI! |
 | Meditate | Zanshin |
+| Unplug other controller | Disarm opponent |
 
 [![Play Book of Five Rings in your browser](Screenshot.png)](https://javatari.org?ROM=https://github.com/dmanning23/MountFuji2600/blob/main/BookOfFiveRings.bin)
