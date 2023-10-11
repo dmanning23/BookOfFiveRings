@@ -13,7 +13,7 @@ First person to die, loses.
 | Left      | Move left |
 | Right      | Move right |
 | Button | Attack |
-| Up (right after attacking)| Cancel attack |
+| Up (immediately after attacking)| Cancel attack |
 | Down | Block |
 | Yell | KIAI! |
 | Meditate | Zanshin |
