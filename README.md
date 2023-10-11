@@ -13,4 +13,8 @@ To play:
 | Down | Block |
 | Yell | Kiai! |
 
+Put the sharp end of the sword into the opponent. 
+
+First person to die, loses.
+
 [![Play Book of Five Rings in your browser](Screenshot.png)](https://javatari.org?ROM=https://github.com/dmanning23/MountFuji2600/blob/main/BookOfFiveRings.bin)
