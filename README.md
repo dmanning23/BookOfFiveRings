@@ -13,7 +13,7 @@ To play:
 | Down | Block |
 | Yell | Kiai! |
 
-Put the sharp end of the sword into the opponent. 
+Put the slicey part of the katana into the opponent. 
 
 First person to die, loses.
 
