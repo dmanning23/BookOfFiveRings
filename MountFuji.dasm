@@ -50,6 +50,18 @@ p2PrevInput byte
 p1Input byte
 p2Input byte
 
+;The timers used to time how long to play sounds
+p1SoundTimer byte
+p2SoundTimer byte
+
+;These variables are used to start playing sounds
+p1SoundVolume byte
+p1SoundControl byte 
+p1SoundFrequency byte
+p2SoundVolume byte
+p2SoundControl byte 
+p2SoundFrequency byte
+
 ;The input flags are as follows:
 controllerDown		equ #%00000001
 controllerUp		equ #%00000010
@@ -128,6 +140,14 @@ Reset
     sta p2PrevInput
     sta p1Input
     sta p2Input
+    sta p1SoundTimer
+    sta p2SoundTimer
+    sta p1SoundVolume
+    sta p1SoundControl 
+    sta p1SoundFrequency 
+    sta p2SoundVolume 
+    sta p2SoundControl 
+    sta p2SoundFrequency 
     rts
 
 NextFrame
@@ -607,6 +627,9 @@ CharacterUpdate
     dex
     stx p1Timer,y
 
+    ;Update the sound for this player
+    jsr UpdateSound
+
     ;check if the game is over
     lda gameOver
     cmp #01
@@ -689,6 +712,10 @@ CheckStandingWalkingInput
     lda #12 
     sta p1Timer,y
 
+    ;Set the sound timer to play the begin swing sound
+    lda #0
+    sta p1SoundTimer,y
+
     jmp DoneUpdatingPlayerState
 
 DoneCheckingButtonPress
@@ -710,6 +737,8 @@ DoneCheckingButtonPress
     ;restart the timer
     lda BlockTime
     sta p1Timer,y
+
+    ;TODO: play the block sound
 
     jmp DoneUpdatingPlayerState
 
@@ -736,7 +765,7 @@ CheckBeginAttacking
     bit controllerUp
     beq DoneCheckingUpPress
 
-    ;change the state to blocking
+    ;The player cancelled, change the state to standing
     lda StandingState
     sta p1State,y
 
@@ -756,6 +785,10 @@ DoneCheckingUpPress
     ;start the timer
     lda AttackTime
     sta p1Timer,y
+
+    ;Reset the sound timer to play the big attack sound
+    lda #0
+    sta p1SoundTimer,y
 
     jmp DoneUpdatingPlayerState
 
@@ -872,6 +905,7 @@ CheckWalkingAnimation
     jmp DoneCheckingAnimation
 
 SetAnimationFrame0
+
     lda #<Frame6
     sta player1CharacterPointer,x
     inx
@@ -1075,6 +1109,10 @@ KillPlayer
     lda #01
     sta gameOver 
 
+    ;Restart the sound timer to play the death sound
+    lda #0
+    sta p1SoundTimer,y
+
     ;start the game over timer
     lda #$FF
     sta gameOverTimer
@@ -1097,6 +1135,10 @@ BouncePlayer
     lda KnockbackTime
     sta p1Timer,y
 
+    ;Restart the sound timer to play the bounce sound for the correct player
+    lda #0
+    sta p1SoundTimer,y
+
     jmp DoneUpdatingGameLogic
 
 SetDoubleBounce
@@ -1108,6 +1150,216 @@ SetDoubleBounce
     jsr BouncePlayer
 
 DoneUpdatingGameLogic
+    rts
+
+UpdateSound
+    ;Check which state the player is in
+    lda p1State,y
+    cmp StandingState
+    beq UpdateStandingSound
+
+    cmp WalkingState
+    beq UpdateWalkingSound
+
+    cmp BeginAttackState
+    beq UpdateBeginAttackingSound
+
+    cmp AttackingState
+    beq UpdateAttackingSound
+
+    cmp BlockingState
+    beq UpdateBlockingSound
+
+    cmp KnockbackState
+    beq UpdateKnockbackSound
+
+    jmp UpdateDeathSound
+
+UpdateStandingSound
+    ;the player is standing still, don't play any sound for them 
+    lda #0
+    sta p1SoundVolume,y
+    jsr PlaySound
+    rts
+
+UpdateWalkingSound
+    ;TODO: play the walking sound
+    lda p1Timer,y ;load the state timer into the A reg
+    bit WalkTime ;AND with 4 frames to animate the player
+    bne PlayWalkSound0
+
+    ;play walk sound 1
+    lda #1
+    sta p1SoundVolume,y
+    lda #8
+    sta p1SoundControl,y
+    lda #28
+    sta p1SoundFrequency,y
+    jsr PlaySound
+
+    jmp DoneUpdatingWalkSound
+
+PlayWalkSound0
+    lda #1
+    sta p1SoundVolume,y
+    lda #14
+    sta p1SoundControl,y
+    lda #28
+    sta p1SoundFrequency,y
+    jsr PlaySound
+
+DoneUpdatingWalkSound
+    rts
+
+UpdateBeginAttackingSound
+    ;TODO: play the begin attack sound
+    rts
+
+UpdateAttackingSound
+    ;TODO: play the attack sound
+    rts
+
+UpdateBlockingSound
+    ;TODO: play the blocking sound
+    rts
+
+UpdateKnockbackSound
+    ;Check how much time has elapsed
+    lda p1SoundTimer,y
+    cmp #0
+
+    ;15,8,16
+    lda #8
+    sta p1SoundVolume,y
+    lda #4
+    sta p1SoundControl,y
+    lda #10
+    sta p1SoundFrequency,y
+    jsr PlaySound
+
+    jmp DoneUpdatingKnockbackSound
+
+DoKnockbackLoopSound
+    ;TODO: do looping effect on knockback sound
+
+DoneUpdatingKnockbackSound
+    ;increment the sound timer
+    jsr IncrementSoundTimer
+    rts
+
+UpdateDeathSound
+    ;Check how much time has elapsed
+    lda p1SoundTimer,y
+    SEC
+    sbc #32
+    bcc DoDeathScreamSound
+    beq StartDeathLoopSound
+    
+     jmp DoDeathLoopSound
+    
+DoDeathScreamSound
+
+    ;Play the death sound
+    lda #14
+    sta p1SoundVolume,y
+    lda #8
+    sta p1SoundControl,y
+    lda #5
+    sta p1SoundFrequency,y
+    
+    jsr PlaySound
+    jmp DoneUpdatingDeathSound
+   
+StartDeathLoopSound
+
+    lda #12
+    sta p1SoundVolume,y
+    lda #8
+    sta p1SoundControl,y
+    lda #1
+    sta p1SoundFrequency,y
+    
+    jsr PlaySound
+    jmp DoneUpdatingDeathSound
+
+DoDeathLoopSound
+    ;do looping effect on death sound
+    ;check if the sound frequency is 32
+    lda p1SoundFrequency,y
+    cmp #32
+    beq RestartDeathLoopSound
+    
+    lda #8
+    sta p1SoundControl,y
+    
+    ldx p1SoundFrequency,y
+    inx
+    stx p1SoundFrequency,y
+    
+    jsr PlaySound
+    jmp DoneUpdatingDeathSound
+    
+RestartDeathLoopSound
+    ;reset the frequency
+    lda #0
+    sta p1SoundFrequency,y
+
+    ;decrement the volume
+    ldx p1SoundVolume,y
+    dex
+    dex
+    stx p1SoundVolume,y   
+
+    jsr PlaySound
+    jmp DoneUpdatingDeathSound
+
+DoneUpdatingDeathSound
+    ;increment the sound timer
+    jsr IncrementSoundTimer
+    rts
+
+IncrementSoundTimer
+    ldx p1SoundTimer,y
+    inx
+    stx p1SoundTimer,y
+    rts
+
+PlaySound
+    ;si the sound p1 or p2
+    tya
+    cmp #00
+    bne PlayP2Sound
+
+    ;play the p1 sound
+    lda p1SoundVolume,y
+    sta AUDV0
+
+    ;load the control up
+    lda p1SoundControl,y
+    sta AUDC0
+
+    ;load the freq up
+    lda p1SoundFrequency,y
+    sta AUDF0
+
+    ;done playing sounds!
+    rts
+
+PlayP2Sound
+    ;play the p2 sound
+    ;load the volume up
+    lda p1SoundVolume,y
+    sta AUDV1
+
+    ;load the control up
+    lda p1SoundControl,y
+    sta AUDC1
+
+    ;load the freq up
+    lda p1SoundFrequency,y
+    sta AUDF1
+
+    ;done playing sounds!
     rts
 
 ;Mount Fuji data
