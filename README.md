@@ -4,8 +4,12 @@ Inspired by the writing of Musashi Musashino, the art of Hiroshige, and of cours
 
 To play:
 
+Put the slicey part of the katana into the opponent. 
+
+First person to die, loses.
+
 | Control        | Action  |
-| ------------- | -----:|
+|:------------- | -----:|
 | Left      | Move left |
 | Right      | Move right |
 | Button | Attack |
@@ -13,9 +17,5 @@ To play:
 | Down | Block |
 | Yell | KIAI! |
 | Meditate | Zanshin |
-
-Put the slicey part of the katana into the opponent. 
-
-First person to die, loses.
 
 [![Play Book of Five Rings in your browser](Screenshot.png)](https://javatari.org?ROM=https://github.com/dmanning23/MountFuji2600/blob/main/BookOfFiveRings.bin)
