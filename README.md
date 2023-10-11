@@ -2,13 +2,13 @@
 ## A samurai duel for the Atari 2600
 Inspired by the writing of Musashi Musashino, the art of Hiroshige, and of course Bushido Blade, the grandaddy of all one-hit-kill swordfighting games.
 
-To play:
+### Instructions
 
 Put the slicey part of the katana into the opponent. 
 
 First person to die, loses.
 
-Controls:
+### Controls
 
 | Action        | Result  |
 |:------------- | -----:|
