@@ -11,7 +11,7 @@ To play:
 | Button | Attack |
 | Up (right after attacking)| Cancel attack |
 | Down | Block |
-| Yell | Kiai! |
+| Yell | KIAI! |
 
 Put the slicey part of the katana into the opponent. 
 
