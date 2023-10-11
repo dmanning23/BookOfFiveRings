@@ -4,7 +4,7 @@ Inspired by the writing of Musashi Musashino, the art of Hiroshige, and of cours
 
 To play:
 
-| Instruction        | Cool  |
+| Control        | Action  |
 | ------------- | -----:|
 | Left      | Move left |
 | Right      | Move right |
@@ -12,6 +12,7 @@ To play:
 | Up (right after attacking)| Cancel attack |
 | Down | Block |
 | Yell | KIAI! |
+| Meditate | Zanshin |
 
 Put the slicey part of the katana into the opponent. 
 
