@@ -1250,18 +1250,43 @@ DoneUpdatingKnockbackSound
 UpdateDeathSound
     ;Check how much time has elapsed
     lda p1SoundTimer,y
-    SEC
+    cmp #0
+    beq StartDeathScreamSound
+    
+    sec
+    sbc #14
+    bcc DoDeathScreamSound1
+    
+    lda p1SoundTimer,y
     sbc #32
     bcc DoDeathScreamSound
     beq StartDeathLoopSound
     
     jmp DoDeathLoopSound
     
+StartDeathScreamSound
+
+    lda #15
+    sta p1SoundVolume,y
+    lda #8
+    sta p1SoundControl,y
+    lda #5
+    sta p1SoundFrequency,y
+    
+    jsr PlaySound
+    jmp DoneUpdatingDeathSound
+    
+DoDeathScreamSound1
+
+    jsr PlaySound
+    jmp DoneUpdatingDeathSound
+
 DoDeathScreamSound
 
     ;Play the death sound
-    lda #14
-    sta p1SoundVolume,y
+    ldx p1SoundVolume,y
+    dex
+    stx p1SoundVolume,y
     lda #8
     sta p1SoundControl,y
     lda #5
