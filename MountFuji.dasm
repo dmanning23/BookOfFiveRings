@@ -1,4 +1,4 @@
-
+ 
     processor 6502
     include "vcs.h"
     include "macro.h"
@@ -738,7 +738,9 @@ DoneCheckingButtonPress
     lda BlockTime
     sta p1Timer,y
 
-    ;TODO: play the block sound
+    ;play the block sound
+    lda #0
+    sta p1SoundTimer,y
 
     jmp DoneUpdatingPlayerState
 
@@ -1168,12 +1170,18 @@ UpdateSound
     beq UpdateAttackingSound
 
     cmp BlockingState
-    beq UpdateBlockingSound
+    beq JumpToUpdateBlockingSound
 
     cmp KnockbackState
-    beq UpdateKnockbackSound
+    beq JumpToUpdateKnockbackSound
 
     jmp UpdateDeathSound
+
+JumpToUpdateBlockingSound
+    jmp UpdateBlockingSound
+
+JumpToUpdateKnockbackSound
+    jmp UpdateKnockbackSound
 
 UpdateStandingSound
     ;the player is standing still, don't play any sound for them 
@@ -1212,18 +1220,106 @@ DoneUpdatingWalkSound
     rts
 
 UpdateBeginAttackingSound
-    ;TODO: play the begin attack sound
+    ;play the begin attack sound
+    lda p1SoundTimer,y
+    sec
+    sbc #6
+    bcc PlayUpdateBeginAttackingSound
+
+    jmp QuietUpdateBeginAttackingSound
+
+PlayUpdateBeginAttackingSound
+    lda #4
+    sta p1SoundVolume,y
+    lda #8
+    sta p1SoundControl,y
+    lda #10
+    sta p1SoundFrequency,y
+
+    jsr PlaySound
+    jmp DoneUpdateBeginAttackingSound
+
+QuietUpdateBeginAttackingSound
+    lda #0
+    sta p1SoundVolume,y
+
+    jsr PlaySound
+    jmp DoneUpdateBeginAttackingSound
+
+DoneUpdateBeginAttackingSound
+    jsr IncrementSoundTimer
     rts
 
 UpdateAttackingSound
-    ;TODO: play the attack sound
+    ;don't play this sound if the game is over
+    lda gameOver
+    cmp #01
+    beq QuietUpdateAttackingSound
+
+    ;play the attack sound
+    lda p1SoundTimer,y
+    sec
+    sbc #12
+    bcc PlayUpdateAttackingSound
+
+    jmp QuietUpdateAttackingSound 
+
+PlayUpdateAttackingSound
+    lda #5
+    sta p1SoundVolume,y
+    lda #8
+    sta p1SoundControl,y
+    lda #27
+    sta p1SoundFrequency,y
+
+    jsr PlaySound
+    jmp DoneUpdateAttackingSound
+
+QuietUpdateAttackingSound
+    lda #0
+    sta p1SoundVolume,y
+
+    jsr PlaySound
+    jmp DoneUpdateAttackingSound
+
+DoneUpdateAttackingSound
+    jsr IncrementSoundTimer
     rts
 
 UpdateBlockingSound
-    ;TODO: play the blocking sound
+    ;play the blocking sound
+    lda p1SoundTimer,y
+    sec
+    sbc #8
+    bcc PlayUpdateBlockingSound
+
+    jmp QuietUpdateBlockingSound
+
+PlayUpdateBlockingSound
+    lda #5
+    sta p1SoundVolume,y
+    lda #8
+    sta p1SoundControl,y
+    lda #28
+    sta p1SoundFrequency,y
+
+    jsr PlaySound
+    jmp DoneUpdateBlockingSound
+
+QuietUpdateBlockingSound
+    lda #0
+    sta p1SoundVolume,y
+    jsr PlaySound
+    jmp DoneUpdateBlockingSound
+
+DoneUpdateBlockingSound
+    jsr IncrementSoundTimer
     rts
 
 UpdateKnockbackSound
+    ;TODO: this sound effect artifacts really bad if played at the same time.
+    ;Check if both players are in knock back and don't play it for p2
+
     ;Check how much time has elapsed
     lda p1SoundTimer,y
     sec
@@ -1827,3 +1923,4 @@ ColorBlood1
     org $fffc
     .word Start	; reset vector
     .word Start	; BRK vector
+ 
