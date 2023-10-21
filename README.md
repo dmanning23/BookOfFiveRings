@@ -2,7 +2,8 @@
 ## A samurai duel for the Atari 2600
 Inspired by the writing of Musashi Musashino, the art of Hiroshige, and of course Bushido Blade, the grandaddy of all one-hit-kill swordfighting games.
 
-Check the Releases page for the latest version:
+Check the Releases page to download the latest version:
+
 https://github.com/dmanning23/BookOfFiveRings/releases
 
 ### How to play
