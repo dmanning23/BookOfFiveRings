@@ -1,0 +1,30 @@
+repo_name: dmanning23/BookOfFiveRings
+report_id: 520b1980adb5cc054a74e7f3bb20c44d
+version: 0.1
+repo_type: Public
+timestamp: '2024-02-29T20:02:12+00:00'
+requested_by: dmanning23
+provider: github
+branch: main
+detected_tools_count: 2
+tools:
+- name: C lang
+  description: One of the most widely used programming languages of all time
+  website_url: http://en.wikipedia.org/wiki/C_(programming_language)
+  open_source: true
+  hosted_saas: false
+  category: Languages & Frameworks
+  sub_category: Languages
+  image_url: https://img.stackshare.io/no-img-open-source.png
+  detection_source_url: https://github.com/dmanning23/BookOfFiveRings
+  detection_source: Repo Metadata
+- name: Git
+  description: Fast, scalable, distributed revision control system
+  website_url: http://git-scm.com/
+  open_source: true
+  hosted_saas: false
+  category: Build, Test, Deploy
+  sub_category: Version Control System
+  image_url: https://img.stackshare.io/service/1046/git.png
+  detection_source_url: https://github.com/dmanning23/BookOfFiveRings
+  detection_source: Repo Metadata
