@@ -2,7 +2,12 @@
 ## A samurai duel for the Atari 2600
 Inspired by the writing of Musashi Musashino, the art of Hiroshige, and of course Bushido Blade, the grandaddy of all one-hit-kill swordfighting games.
 
-Check the Releases page for the latest version:
+Play it in your browser:
+
+https://javatari.org?ROM=https://github.com/dmanning23/BookOfFiveRings/releases/download/1.0/BookOfFiveRings.bin
+
+Check the Releases page to download the latest version:
+
 https://github.com/dmanning23/BookOfFiveRings/releases
 
 ### How to play
@@ -24,4 +29,4 @@ First person to die, loses.
 | Meditate | Zanshin |
 | Unplug other controller | Disarm opponent |
 
-[![Play Book of Five Rings in your browser](Screenshot.png)](https://javatari.org?ROM=https://github.com/dmanning23/MountFuji2600/blob/main/BookOfFiveRings.bin)
+[![Play Book of Five Rings in your browser](Screenshot.png)](https://javatari.org?ROM=https://github.com/dmanning23/BookOfFiveRings/releases/download/1.0/BookOfFiveRings.bin)
