@@ -6,6 +6,8 @@ Play it in your browser:
 
 https://javatari.org?ROM=https://github.com/dmanning23/BookOfFiveRings/releases/download/1.0/BookOfFiveRings.bin
 
+[![Play Book of Five Rings in your browser](BookOfFiveRings.png)](https://javatari.org?ROM=https://github.com/dmanning23/BookOfFiveRings/releases/download/1.0/BookOfFiveRings.bin)
+
 Check the Releases page to download the latest version:
 
 https://github.com/dmanning23/BookOfFiveRings/releases
